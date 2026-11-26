@@ -1,0 +1,345 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2b1218">
+  <meta name="description" content="Браузерный раннер. Пробегите из свадебного зала в сад под свадебный трек.">
+  <title>БРАЧНОЕ РАБСТВО</title>
+  <link rel="stylesheet" href="style.css?v=menu-static">
+  <script id="telegram-web-app" src="https://telegram.org/js/telegram-web-app.js?65" async></script>
+  <script src="models.js?v=wedding-limo" defer></script>
+  <script src="scene.js?v=portrait-chase-camera" defer></script>
+  <script src="highway-depth.js?v=campus-decor" defer></script>
+  <script src="highway-campus.js?v=campus-light" defer></script>
+  <script src="highway-scene.js?v=sky-course" defer></script>
+  <script src="highway.js?v=ost-settings" defer></script>
+  <script src="campus-dorm.js?v=room-332" defer></script>
+  <script src="campus-interior.js?v=room-332" defer></script>
+  <script src="campus-quiz.js?v=run-rules" defer></script>
+  <script src="game.js?v=telegram-swipes" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div class="identity"><span class="monogram" aria-hidden="true"><i></i><i></i></span><span>Брачное<br>рабство</span></div>
+      <div class="route" aria-label="Маршрут">
+        <div id="route-main" class="route-main"><span id="route-hall" class="current"><b>01</b> Зал</span><i></i><span id="route-garden"><b>02</b> Сад</span></div>
+        <span id="route-heaven" class="current" aria-current="step" hidden>☁ Рай</span>
+      </div>
+      <div class="header-actions">
+        <button id="help" class="icon-btn" type="button" aria-label="Управление и бусты" title="Управление и бусты" hidden>?</button>
+        <button id="sound" class="icon-btn" type="button" aria-label="Выключить звук" title="Выключить звук" aria-pressed="false"><span class="sound-icon" aria-hidden="true">♪</span></button>
+      </div>
+    </header>
+
+    <section id="stage" class="stage" aria-label="Игровое поле">
+      <canvas id="scene" aria-label="Свадебная трасса с тремя дорожками"></canvas>
+      <div class="vignette" aria-hidden="true"></div>
+      <div id="hud" class="hud" hidden>
+        <div class="readout"><div class="counter"><span>КАПИТАЛ</span><strong id="money">0 ₽</strong></div><div class="counter compact"><span>ПРОЙДЕНО</span><strong id="distance">0 м</strong></div></div>
+        <div id="boosts-live" class="boosts-live"></div>
+        <button id="pause" class="icon-btn pause" type="button" aria-label="Пауза" title="Пауза (Esc)">Ⅱ</button>
+        <div class="timer"><div><span id="chapter-label">Свадебный зал</span><time id="clock">0:00 / 1:30</time></div><div class="progress"><i id="progress"></i></div></div>
+        <div id="heaven-hud" class="heaven-hud" hidden>
+          <div class="heaven-clock"><span>До возвращения</span><time id="heaven-clock">20 с</time></div>
+          <div class="progress"><i id="heaven-progress"></i></div>
+          <strong id="heaven-money" aria-label="Сосиски и стоимость"></strong>
+          <div id="heaven-boosts" class="heaven-boosts" aria-label="Бусты в Раю"></div>
+        </div>
+      </div>
+      <div id="toast" class="toast" role="status" hidden></div>
+      <p id="guest-speech" class="guest-speech" role="status" aria-atomic="true" hidden></p>
+      <p id="bride-speech" class="guest-speech" role="status" aria-atomic="true" hidden></p>
+      <div id="cloud-veil" class="cloud-veil" aria-hidden="true" hidden><i></i><i></i><i></i></div>
+      <div id="heaven-fine" class="heaven-fine" role="status" hidden>
+        <div><strong>ВАС ПРИНЯЛИ. ВЫ ЗАНЕСЛИ 50% КАПИТАЛА</strong>
+          <span id="fine-debit" class="fine-debit"></span>
+          <div class="fine-readout"><span>Капитал</span><output id="fine-capital" aria-live="off"></output></div>
+          <span>Игра продолжится через</span><b id="fine-count">3</b></div>
+      </div>
+      <section id="main-menu" class="main-menu" aria-labelledby="menu-title">
+        <header class="menu-heading">
+          <h1 id="menu-title">БРАЧНОЕ<br>РАБСТВО</h1>
+          <p>основано на реальных событиях</p>
+        </header>
+        <div class="menu-actions">
+          <button id="menu-play" class="primary wedding-primary" type="button" aria-haspopup="dialog">ИГРАТЬ</button>
+          <button id="menu-story" class="secondary wedding-secondary" type="button" aria-haspopup="dialog">ПРЕДЫСТОРИЯ</button>
+          <div class="menu-extras">
+            <button id="menu-ost" class="secondary wedding-secondary" type="button" aria-haspopup="dialog">OST (МУЗЫКА ИЗ ИГРЫ)</button>
+            <button id="menu-settings" class="secondary wedding-secondary" type="button" aria-haspopup="dialog">НАСТРОЙКИ</button>
+          </div>
+        </div>
+        <footer class="menu-notice">ИГРА С ЛОКАЛЬНЫМ ЮМОРОМ. МЫ НЕ ПОДДЕРЖИВАЕМ ВСЕ, ЧТО В НЕЙ ЕСТЬ</footer>
+      </section>
+      <div id="overlay" class="overlay concluded" hidden>
+        <div class="card">
+          <div id="eyebrow" class="eyebrow"><i></i><span></span></div>
+          <h1 id="headline"></h1>
+          <p id="description"></p>
+          <div id="results" class="results" hidden>
+            <div><span>СОБРАНО</span><strong id="result-money"></strong></div>
+            <div><span>ПРОЙДЕНО</span><strong id="result-distance"></strong></div>
+            <div><span>РЕКОРД</span><strong id="result-best"></strong></div>
+          </div>
+          <div class="card-actions">
+            <button id="primary" class="primary" type="button"><span aria-hidden="true">▶</span><span id="primary-label"></span></button>
+            <button id="secondary" class="secondary" type="button" hidden>Начать с сада</button>
+          </div>
+        </div>
+      </div>
+      <section id="runner-pause" class="pause-screen" aria-labelledby="runner-pause-title" hidden>
+        <div class="pause-panel wedding-panel">
+          <h2 id="runner-pause-title" class="wedding-heading">ПАУЗА</h2>
+          <div class="pause-actions">
+            <button id="pause-resume" class="primary wedding-primary" type="button">Продолжить</button>
+            <button id="pause-restart" class="secondary wedding-secondary" type="button">Начать заново</button>
+            <button id="pause-menu" class="secondary wedding-secondary" type="button">В главное меню</button>
+          </div>
+          <div id="runner-guide" class="pause-guide">
+            <section aria-labelledby="runner-controls">
+              <h3 id="runner-controls" tabindex="-1">УПРАВЛЕНИЕ</h3>
+              <dl class="control-list">
+                <dt>В стороны</dt><dd><kbd>←</kbd> <kbd>→</kbd> или <kbd>A</kbd> <kbd>D</kbd><br>Свайп влево или вправо</dd>
+                <dt>Прыжок</dt><dd><kbd>↑</kbd> или <kbd>W</kbd><br>Свайп вверх</dd>
+                <dt>Подкат</dt><dd><kbd>↓</kbd> или <kbd>S</kbd><br>Свайп вниз</dd>
+                <dt>Пауза</dt><dd><kbd>Esc</kbd> или <kbd>P</kbd><br>Кнопка <b>Ⅱ</b> на экране</dd>
+                <dt>Продолжить</dt><dd><kbd>Пробел</kbd>, <kbd>Esc</kbd> или <kbd>P</kbd></dd>
+              </dl>
+              <p>За купюру начисляется 5 000 ₽. По тягачам со стрелками можно забежать на крышу. В 1:30 пройди через дверь «Выход» на центральной дорожке.</p>
+            </section>
+            <section aria-labelledby="runner-boosts">
+              <h3 id="runner-boosts">БУСТЫ</h3>
+              <div class="power-list">
+                <div><img src="assets/bottle.webp" alt=""><div><b>Охота крепкое</b><span>Даёт до 10 секунд полёта над препятствиями. Нажми ↓ или S либо свайпни вниз, чтобы прервать полёт.</span></div></div>
+                <div><img src="assets/hood.webp" alt=""><div><b>Капюшон</b><span>Поглощает одно столкновение с препятствием. Заряд общий для зала, сада и Рая и действует до первого удара.</span></div></div>
+                <div><img src="assets/boots.webp" alt=""><div><b>Ганжаботы</b><span>На 20 секунд удваивают высоту прыжка. Нажми ↑, чтобы запрыгнуть на крышу тягача или перепрыгнуть щиток ↓.</span></div></div>
+                <div><span class="multiplier-mark" aria-hidden="true">×2</span><div><b>Множитель капусты</b><span>×2 удваивает капитал, заработанный в текущем забеге. ×5 выпадает в 20% случаев и увеличивает её впятеро. Каждая следующая купюра даёт 5 000 ₽.</span></div></div>
+                <div><img data-boost-icon="magnet" alt=""><div><b>Магнит</b><span>Притягивает купюры со всех трёх дорожек 12 секунд.</span></div></div>
+                <div><img data-boost-icon="leaf" alt=""><div><b>Легалайз</b><span>Переносит в Рай на 20 секунд. Перепрыгивай Škoda, используй ганжаботы для Haval и Jeep, забегай на автобус по стрелкам. При выходе каждая сосиска даст 2 500 ₽. Если Кузя поймает, потеряешь сосиски и половину капитала, с которым вошёл.</span></div></div>
+              </div>
+            </section>
+            <div class="pause-local-tools">
+              <form class="admin-key" data-admin-key>
+                <label>Ключ администратора<input type="password" name="key" autocomplete="off" autocapitalize="none" spellcheck="false" required></label>
+                <button class="secondary wedding-secondary" type="submit">Открыть</button>
+                <output role="status"></output>
+              </form>
+              <label class="capital-switch" data-admin-tool hidden><input type="checkbox" role="switch" data-unlimited-garage> Бесконечные деньги</label>
+              <div id="pause-teleports" class="pause-teleports" role="group" aria-labelledby="pause-teleports-title" data-admin-tool hidden>
+                <h3 id="pause-teleports-title">Телепорты</h3>
+                <div class="teleport-actions">
+                  <button id="teleport-hall" class="secondary wedding-secondary" type="button">В начало зала</button>
+                  <button id="teleport-garden" class="secondary wedding-secondary" type="button">В начало сада</button>
+                  <button id="teleport-yard" class="secondary wedding-secondary" type="button">На стоянку</button>
+                  <button id="teleport-campus" class="secondary wedding-secondary" type="button">В Гауманку</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p class="wedding-credit">идея и реализация - @simga79 и @real_vampp</p>
+        </div>
+      </section>
+      <section id="parking-intro" class="parking-screen parking-intro" aria-labelledby="parking-heading" hidden>
+        <div class="parking-panel parking-card">
+          <h2 id="parking-heading" tabindex="-1">СЕЙЧАС ТЕБЕ ПРЕДСТОИТ СЕСТЬ ЗА РУЛЬ И УЕХАТЬ В ЛУЧШУЮ ЖИЗНЬ К ГРЯЗНУЛЕ ИЗ ГАУМАНКИ</h2>
+          <button id="parking-continue" class="primary parking-continue" type="button">Продолжить</button>
+        </div>
+      </section>
+      <section id="garage" class="parking-screen garage" aria-labelledby="garage-heading" hidden>
+        <div class="parking-panel garage-inner">
+          <header class="garage-header">
+            <h2 id="garage-heading" tabindex="-1">ВЫБЕРИ МАШИНУ ДЛЯ СЪЕБА ОТ НЕВЕСТЫ</h2>
+            <div class="garage-tools">
+              <div class="garage-wallet"><span>Капитал</span><output id="garage-capital"></output></div>
+              <button id="garage-sound" class="icon-btn" type="button" aria-label="Выключить звук" aria-pressed="false"><span class="sound-icon" aria-hidden="true">♪</span></button>
+            </div>
+          </header>
+          <div class="garage-main">
+            <figure class="garage-art-frame"><img id="garage-image" class="garage-art" alt=""></figure>
+            <div class="garage-order">
+              <h3 id="garage-name"></h3>
+              <p id="garage-price"></p>
+              <p id="garage-nitro" class="garage-nitro"></p>
+              <p id="garage-speed" class="garage-nitro"></p>
+              <button id="garage-buy" class="garage-buy" type="button"></button>
+              <p id="garage-status" role="status"></p>
+            </div>
+          </div>
+          <div id="garage-options" class="truck-options" role="group" aria-label="Машины для побега"></div>
+          <footer class="garage-actions">
+            <button id="garage-continue" class="primary parking-continue" type="button" disabled>ПРОДОЛЖИТЬ</button>
+          </footer>
+        </div>
+      </section>
+      <section id="drive" class="drive" aria-label="Поездка до Гауманки" tabindex="-1" hidden>
+        <header class="drive-route">
+          <div class="drive-route-heading"><span data-drive="routeLabel">ДО ГАУМАНКИ</span><span class="drive-chase-key">ПАХАН</span><output data-drive="distance"></output></div>
+          <div class="drive-progress" data-drive="progress" role="progressbar" aria-label="Маршрут до Гауманки">
+            <i data-drive="fill" class="drive-player-line"></i>
+            <i data-drive="chaseFill" class="drive-chase-line"></i>
+          </div>
+          <ol class="drive-stops" data-drive="stops" aria-label="Пункты маршрута"></ol>
+        </header>
+        <div class="drive-tools">
+          <button data-drive="sound" class="icon-btn" type="button" aria-label="Выключить звук" aria-pressed="false">♪</button>
+          <button data-drive="pause" class="icon-btn" type="button" aria-label="Пауза поездки" title="Пауза (Esc)">Ⅱ</button>
+        </div>
+        <p data-drive="speech" class="drive-speech" role="status" hidden>ЖЕНИСЬ СУКА</p>
+        <p data-drive="impact" class="drive-impact" role="status" hidden>КОНТАКТ · СБРОС СКОРОСТИ</p>
+        <footer class="drive-controls">
+          <div class="drive-speed"><strong data-drive="speed"></strong><span>км/ч</span><small data-drive="car"></small></div>
+          <div class="drive-steer" role="group" aria-label="Управление машиной">
+            <button data-drive="left" type="button" aria-label="Руль влево">←</button>
+            <button data-drive="throttle" class="drive-throttle" type="button" aria-label="Газ, удерживай для разгона"><span>ГАЗ</span></button>
+            <button data-drive="right" type="button" aria-label="Руль вправо">→</button>
+          </div>
+          <div class="drive-nitro" data-drive="nitroPanel" hidden>
+            <button data-drive="nitro" type="button" disabled>
+              <span><strong>НИТРО</strong><b data-drive="nitroAmount"></b></span>
+              <i class="drive-nitro-meter"><i data-drive="nitroFill"></i></i>
+            </button>
+          </div>
+        </footer>
+        <section class="pause-screen drive-screen" data-drive="panel" aria-labelledby="drive-pause-title" hidden>
+          <div class="pause-panel wedding-panel">
+            <h2 id="drive-pause-title" class="wedding-heading" data-drive="title"></h2>
+            <p class="drive-pause-detail" data-drive="detail" role="status"></p>
+            <div class="pause-actions">
+              <button data-drive="resume" class="primary wedding-primary" type="button">Продолжить поездку</button>
+              <button data-drive="back" class="secondary wedding-secondary" type="button">К выбору машины</button>
+              <button data-drive="mainMenu" class="secondary wedding-secondary" type="button">В главное меню</button>
+            </div>
+            <div class="pause-guide">
+              <section aria-labelledby="drive-pause-controls">
+                <h3 id="drive-pause-controls">УПРАВЛЕНИЕ</h3>
+                <dl class="control-list">
+                  <dt>Руль</dt><dd><kbd>←</kbd> <kbd>→</kbd> или <kbd>A</kbd> <kbd>D</kbd><br>Кнопки <b>←</b> <b>→</b> на экране</dd>
+                  <dt>Газ</dt><dd>Удерживай <kbd>W</kbd>, <kbd>↑</kbd> или кнопку «ГАЗ» после первого рывка с нитро</dd>
+                  <dt>Пауза</dt><dd><kbd>Esc</kbd> или <kbd>P</kbd><br>Кнопка <b>Ⅱ</b> на экране</dd>
+                </dl>
+                <p>Красная линия показывает, где пахан.</p>
+              </section>
+              <section aria-labelledby="drive-pause-boosts">
+                <h3 id="drive-pause-boosts">БУСТЫ</h3>
+                <div class="power-list">
+                  <div><div><b>Нитро</b><span>Удерживай <kbd>Shift</kbd> или кнопку «НИТРО», чтобы оторваться от пахана. Полоса на кнопке показывает запас.</span></div></div>
+                </div>
+              </section>
+            </div>
+            <form class="admin-key" data-admin-key>
+              <label>Ключ администратора<input type="password" name="key" autocomplete="off" autocapitalize="none" spellcheck="false" required></label>
+              <button class="secondary wedding-secondary" type="submit">Открыть</button>
+              <output role="status"></output>
+            </form>
+            <div class="drive-admin-tools" data-admin-tool hidden>
+              <label class="capital-switch"><input type="checkbox" role="switch" data-unlimited-garage> Бесконечные деньги</label>
+              <button data-drive="teleportCampus" class="secondary wedding-secondary" type="button">В Гауманку</button>
+            </div>
+            <p class="wedding-credit">идея и реализация - @simga79 и @real_vampp</p>
+          </div>
+        </section>
+      </section>
+      <section id="campus-quiz" class="campus-quiz" aria-label="Сессия в Гауманке" tabindex="-1" hidden>
+        <header class="campus-hud">
+          <div class="campus-badge"><strong data-campus="location">ГАУМАНКА</strong><span data-campus="progress"></span></div>
+          <div class="campus-status">
+            <button id="campus-sound" class="icon-btn" type="button" aria-label="Выключить звук" aria-pressed="false"><span class="sound-icon" aria-hidden="true">♪</span></button>
+            <div class="campus-wallet" data-campus="wallet">
+              <span>Капитал</span><output data-campus="capital" aria-live="off"></output>
+              <strong class="campus-debit" data-campus="change" role="status" hidden></strong>
+            </div>
+          </div>
+        </header>
+        <div id="campus-question" class="campus-message" data-campus="message" tabindex="-1" hidden>
+          <span data-campus="messageText"></span><strong data-campus="amount" hidden></strong>
+        </div>
+        <div data-campus="choices" role="group" aria-labelledby="campus-question" hidden>
+          <button class="campus-door" data-campus="left" type="button"><span></span></button>
+          <button class="campus-door" data-campus="right" type="button"><span></span></button>
+        </div>
+        <div class="campus-bargain" data-campus="bargain" role="group" aria-labelledby="campus-question" hidden>
+          <button class="primary" data-campus="pay" type="button">ЗАНЕСТИ</button>
+          <button class="secondary" data-campus="refuse" type="button">СДАТЬ СЕССИЮ САМОМУ</button>
+        </div>
+        <div class="campus-failure" data-campus="failure" role="alert" hidden>
+          <p data-campus="failureText"></p>
+        </div>
+        <div class="campus-complete" data-campus="complete" hidden>
+          <div class="campus-result">
+            <h2>СЕССИЯ СДАНА</h2>
+            <p data-campus="result"></p>
+            <button class="primary" data-campus="menu" type="button">ПЕРЕЙТИ В ОБЩАГУ</button>
+          </div>
+        </div>
+        <div class="campus-bargain dorm-choices" data-campus="dormChoices" role="group" aria-labelledby="campus-question" hidden>
+          <button class="secondary" data-campus="spend" type="button">ПОРЕЗВИТЬСЯ С ГРЯЗНУЛЬКОЙ НА ВСЕ БАБКИ</button>
+          <button class="secondary" data-campus="keep" type="button">ОСТАВИТЬ КАПУСТУ СЕБЕ</button>
+        </div>
+        <div class="dorm-ending" data-campus="dormEnding" hidden>
+          <div class="dorm-result" data-campus="dormResult" hidden>
+            <div data-campus="scoreCard" hidden>
+              <h2>ИТОГОВЫЙ СЧЁТ</h2>
+              <p><output data-campus="score" aria-live="off"></output><span>СЕКСОВ С ИРИШКОЙ</span></p>
+              <p class="dorm-exchange" data-campus="exchange"></p>
+            </div>
+            <h2 class="dorm-bad-ending" data-campus="badEnding" tabindex="-1" hidden>ПРИДЕТСЯ ЖЕНИТЬСЯ <span>(ПЛОХАЯ КОНЦОВКА)</span></h2>
+            <button class="primary" data-campus="finish" type="button" hidden>В главное меню</button>
+          </div>
+        </div>
+      </section>
+      <div id="campus-entry-light" class="campus-entry-light" aria-hidden="true" hidden></div>
+      <div id="drive-fade" class="drive-fade" aria-hidden="true"></div>
+      <div id="drive-caught" class="drive-caught" role="alert" hidden>ПРИДЕТСЯ ЖЕНИТЬСЯ...</div>
+    </section>
+
+    <div id="campus-ending" class="campus-ending" role="status" hidden>ПРИДЕТСЯ ЖЕНИТЬСЯ</div>
+  </main>
+  <dialog id="story" class="wedding-dialog wedding-panel" aria-labelledby="story-title">
+    <header class="dialog-heading">
+      <h2 id="story-title" class="wedding-heading">ПРЕДЫСТОРИЯ</h2>
+      <form method="dialog"><button class="icon-btn dialog-close" aria-label="Закрыть" type="submit" autofocus>×</button></form>
+    </header>
+    <div class="story-scroll" tabindex="0" role="region" aria-labelledby="story-title">
+      <p>августом 2025 года у дмитрия невероятно чесались яйца. Устранить зуд паховой области он решил с помощью дайвинчика... Закинув удочку в это проклятое место, он пару дней ждал улова. И наконец свершилось чудо - анкета лайкнута. Зайдя в профиль отчаившейся дима не увидел ни одного фото. А созвонившись с будущей невестой, он услышал подозрительный басок в голосе...</p>
+      <p>Молодожены назначили встречу - общага рыбки, которую очень хотел насадить на вертель герой истории. Встретившись, дима понял, что такого карася не вытащить без охоты крепкой из пруда, попросту удочка не встанет. Накатив, рыбак осознал, что у его прибора снижена чувствительность, и снял с себя всю ответственность и ... капюшон от Durex. Икра была заложена в рыбу уже через пару минут.</p>
+      <p>Дальше все по классике - непонимания, ссоры, испорченные отношения с родителями и решение - жениться и рожать. Свадьбу обещали обеспечить родители жениха, поэтому у потерпевшего возник план - спиздить маткапитал, сказав второй половинке, что именно он будет потрачен на свадьбу. Она узнала о предательстве любимого прямо на свадьбе. Итог истории - эта игра, основанная исключительно на реальных событиях</p>
+      <p class="wedding-credit">идея и реализация - @simga79 и @real_vampp</p>
+    </div>
+  </dialog>
+  <dialog id="ost" class="wedding-dialog wedding-panel" aria-labelledby="ost-title">
+    <header class="dialog-heading">
+      <div><h2 id="ost-title" class="wedding-heading">OST</h2><p class="ost-author">Автор · DIMASS228</p></div>
+      <div class="dialog-actions">
+        <button id="ost-sound" class="icon-btn" type="button" aria-label="Выключить звук" aria-pressed="false"><span class="sound-icon" aria-hidden="true">♪</span></button>
+        <form method="dialog"><button class="icon-btn dialog-close" aria-label="Закрыть" type="submit" autofocus>×</button></form>
+      </div>
+    </header>
+    <ul id="ost-tracks" class="ost-tracks"></ul>
+    <audio id="ost-player" controls preload="none" aria-label="Проигрыватель музыки из игры"></audio>
+  </dialog>
+  <dialog id="settings" class="wedding-dialog wedding-panel" aria-labelledby="settings-title">
+    <header class="dialog-heading">
+      <h2 id="settings-title" class="wedding-heading">НАСТРОЙКИ</h2>
+      <div class="dialog-actions">
+        <button id="settings-sound" class="icon-btn" type="button" aria-label="Выключить звук" aria-pressed="false"><span class="sound-icon" aria-hidden="true">♪</span></button>
+        <form method="dialog"><button class="icon-btn dialog-close" aria-label="Закрыть" type="submit" autofocus>×</button></form>
+      </div>
+    </header>
+    <div id="settings-guide"></div>
+    <p class="wedding-credit">идея и реализация - @simga79 и @real_vampp</p>
+  </dialog>
+  <dialog id="warning" class="wedding-dialog wedding-panel" aria-labelledby="warning-title" aria-describedby="warning-text">
+    <h2 id="warning-title" class="wedding-heading">ВАЖНО</h2>
+    <p id="warning-text">ИГРА СЮЖЕТНАЯ, В НЕЙ НЕСКОЛЬКО ИГРОВЫХ МЕХАНИК (НЕ ТОЛЬКО САБВЕЙ СЕРФЕРС) И КОНЦОВКА-СЮРПРИЗ</p>
+    <button id="warning-continue" class="primary wedding-primary" type="button" autofocus>ПРОДОЛЖИТЬ</button>
+  </dialog>
+  <audio id="menu-track" data-ost-title="Свадьба меню" src="assets/wedding-menu.mp3" preload="metadata" loop></audio>
+  <audio id="track" data-ost-title="Свадебный" src="assets/wedding.mp3?v=heaven-2" preload="none"></audio>
+  <audio id="heaven-track" data-ost-title="Губкабонг" src="assets/heaven.mp3?v=gubkabong-003" preload="auto"></audio>
+  <audio id="garage-track" data-ost-title="Тема тягачей" src="assets/garage.mp3" preload="metadata" loop></audio>
+  <audio id="drive-track" data-ost-title="Малоимущий" src="assets/maloimushchiy.mp3" preload="metadata"></audio>
+  <audio id="campus-track" data-ost-title="Тема Гауманки" src="assets/gau.mp3" preload="metadata" loop></audio>
+</body>
+</html>
