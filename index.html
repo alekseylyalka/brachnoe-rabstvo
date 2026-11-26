@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#2b1218">
   <meta name="description" content="Браузерный раннер. Пробегите из свадебного зала в сад под свадебный трек.">
   <title>БРАЧНОЕ РАБСТВО</title>
-  <link rel="stylesheet" href="style.css?v=menu-static">
+  <link rel="stylesheet" href="style.css?v=portrait-hud">
   <script id="telegram-web-app" src="https://telegram.org/js/telegram-web-app.js?65" async></script>
   <script src="models.js?v=wedding-limo" defer></script>
-  <script src="scene.js?v=hall-render-budget" defer></script>
+  <script src="scene.js?v=portrait-hud" defer></script>
   <script src="highway-depth.js?v=campus-decor" defer></script>
   <script src="highway-campus.js?v=campus-light" defer></script>
   <script src="highway-scene.js?v=sky-course" defer></script>
@@ -17,7 +17,7 @@
   <script src="campus-dorm.js?v=room-332" defer></script>
   <script src="campus-interior.js?v=room-332" defer></script>
   <script src="campus-quiz.js?v=run-rules" defer></script>
-  <script src="game.js?v=numeric-admin-code" defer></script>
+  <script src="game.js?v=portrait-hud" defer></script>
 </head>
 <body>
   <main class="shell">
@@ -38,14 +38,14 @@
       <div class="vignette" aria-hidden="true"></div>
       <div id="hud" class="hud" hidden>
         <div class="readout"><div class="counter"><span>КАПИТАЛ</span><strong id="money">0 ₽</strong></div><div class="counter compact"><span>ПРОЙДЕНО</span><strong id="distance">0 м</strong></div></div>
-        <div id="boosts-live" class="boosts-live"></div>
+        <div id="boosts-live" class="boosts-live" role="group" aria-label="Активные бусты" hidden></div>
         <button id="pause" class="icon-btn pause" type="button" aria-label="Пауза" title="Пауза (Esc)">Ⅱ</button>
         <div class="timer"><div><span id="chapter-label">Свадебный зал</span><time id="clock">0:00 / 1:30</time></div><div class="progress"><i id="progress"></i></div></div>
         <div id="heaven-hud" class="heaven-hud" hidden>
           <div class="heaven-clock"><span>До возвращения</span><time id="heaven-clock">20 с</time></div>
           <div class="progress"><i id="heaven-progress"></i></div>
           <strong id="heaven-money" aria-label="Сосиски и стоимость"></strong>
-          <div id="heaven-boosts" class="heaven-boosts" aria-label="Бусты в Раю"></div>
+          <div id="heaven-boosts" class="heaven-boosts" role="group" aria-label="Бусты в Раю" hidden></div>
         </div>
       </div>
       <div id="toast" class="toast" role="status" hidden></div>

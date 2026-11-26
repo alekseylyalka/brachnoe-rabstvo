@@ -125,6 +125,7 @@
   }
   const chips = makeChips(ui["boosts-live"],Object.keys(boosts));
   const heavenChips = makeChips(ui["heaven-boosts"],["hood","boots","magnet","multiplier"]);
+  const compactRunnerHud = matchMedia("(max-width: 600px) and (orientation: portrait)");
 
   let mode = "menu";
   let t = 0;
@@ -1450,13 +1451,19 @@
     const active = {bottle:Math.ceil(flightUntil-t),hood:shield?1:0,boots:Math.ceil(bootsUntil-t),
       magnet:Math.ceil(magnetUntil-t),multiplier:(portal?.factor ?? 1)-1};
     const heaven = inHeaven();
+    const compact = !heaven && compactRunnerHud.matches;
+    let hasBoosts = false;
     for (const [kind,{chip,icon,value}] of Object.entries(heaven?heavenChips:chips)) {
-      chip.hidden = active[kind]<=0;
+      const hidden = active[kind]<=0 || (compact && kind==="hood");
+      if (chip.hidden !== hidden) chip.hidden = hidden;
       if (chip.hidden) continue;
+      hasBoosts = true;
       if (kind === "multiplier") setText(icon,`×${portal.factor}`);
       const seconds = heaven ? Math.min(active[kind],Math.ceil(heavenDuration-t)) : active[kind];
       setText(value,kind==="hood"?"1 удар":kind==="multiplier"?"до выхода":seconds+" с");
     }
+    const boostGroup = ui[heaven ? "heaven-boosts" : "boosts-live"];
+    if (boostGroup.hidden === hasBoosts) boostGroup.hidden = !hasBoosts;
     if (heaven) {
       setText(ui["heaven-clock"],`${Math.max(0,Math.ceil(heavenDuration-t))} с`);
       const {sausages,multipliedSausages,factor} = portal;
@@ -1468,6 +1475,7 @@
       return;
     }
     setText(ui.money,formatCapital(portal?.caught ? fineCapital(portal) : capitalKopecks));
+    if (compact) return;
     setText(ui.distance,number.format(Math.floor(distance-speedCurve(startTime))) + " м");
     const chapterStart = garden ? hallEnd : 0;
     const chapterEnd = garden ? (audio.duration || trackDuration) : hallEnd;
@@ -1894,6 +1902,9 @@
     requestAnimationFrame(frame);
   }
 
+  compactRunnerHud.addEventListener("change",() => {
+    if (mode === "playing" || mode === "paused") updateHud();
+  });
   byId("telegram-web-app")?.addEventListener("load",syncTelegramSwipes,{once:true});
   updateSound();
   if (previewOnly) {
