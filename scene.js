@@ -2,6 +2,11 @@
 
 window.WeddingScene = class WeddingScene {
   static viewDistance = 196;
+  static renderSettings = [
+    {pixelRatio:2, sceneryDistance:196, hallPixelRatio:2, hallDistance:166, hallDetail:1},
+    {pixelRatio:1.40, sceneryDistance:154, hallPixelRatio:1.25, hallDistance:124, hallDetail:.82},
+    {pixelRatio:1, sceneryDistance:112, hallPixelRatio:.90, hallDistance:94, hallDetail:.67}
+  ];
   static archHalfWidth = 4.68;
   static archSpring = 3.44;
   static paintingCount = 63;
@@ -17,6 +22,16 @@ window.WeddingScene = class WeddingScene {
   static brideScale = [1.02*1.8,2.107/1.884,1.02];
   static archCurve = Array.from({length:19},(_,i) =>
     [Math.cos(i*Math.PI/18),Math.sin(i*Math.PI/18)]);
+  static truckStyles = [
+    { name:"VOLVO", body:"#147e83", light:"#6bdfd2", shade:"#18505e", trailer:"#217881",
+      deck:"#93ddd4", stripe:"#c3f7dc", glass:"#80c7da", rake:.23, grille:.58 },
+    { name:"SCANIA", body:"#b63147", light:"#f28c77", shade:"#652838", trailer:"#943449",
+      deck:"#e9937e", stripe:"#ffd2a6", glass:"#89b4d0", rake:.18, grille:.65 },
+    { name:"MAN", body:"#385db8", light:"#8caaf0", shade:"#263f7d", trailer:"#3c59a1",
+      deck:"#a7c4ed", stripe:"#badcff", glass:"#93c1e9", rake:.33, grille:.67 },
+    { name:"КАМАЗ", body:"#c36a23", light:"#ffc484", shade:"#7e412c", trailer:"#ad612d",
+      deck:"#eab675", stripe:"#fff0bd", glass:"#91b7ca", rake:.10, grille:.61 }
+  ];
 
   static pickPhotos(count) {
     const pool = Array.from({length:WeddingScene.paintingCount},(_,i)=>i);
@@ -30,13 +45,26 @@ window.WeddingScene = class WeddingScene {
     this.cameraX = 0;
     this.brideOffset = 0;
     this.previousFrame = 0;
+    this.performanceFrames = 0;
+    this.slowFrames = 0;
+    this.smoothWindows = 0;
+    this.minimumRenderQuality = 0;
     this.note = this.makeGlowingNote();
     this.paintings = [];
     this.photos = [];
     this.paintingsReady = Promise.all(Array.from({length:WeddingScene.paintingCount},(_,index) =>
       this.loadPainting(index)));
     this.bouquets = Array.from({length:8},(_,i) => this.makeBouquet(i*19+3));
+    this.hallFlowers = Array.from({length:3},(_,i) => this.makeHallFlowers(i));
+    this.truckTrim = WeddingScene.truckStyles.map((paint,brand)=>this.makeTruckTrim(paint,brand));
+    this.truckHub = this.makeTruckHub();
+    this.pickupSprites = this.makePickupSprites();
+    this.gardenFlowerBeds = this.makeGardenFlowerBeds();
+    this.runnerGait = [];
+    this.brideGait = [];
+    this.faceProjection = [];
     this.lampGlow = this.makeLampGlow();
+    this.hallLight = this.makeHallLight();
     this.heavenCloud = this.makeHeavenCloud();
     const skyPhoto = new Image();
     skyPhoto.onload = () => { this.heavenPortrait = this.makeHeavenPortrait(skyPhoto); };
@@ -71,13 +99,40 @@ window.WeddingScene = class WeddingScene {
     const { width, height } = this.canvas.getBoundingClientRect();
     this.w = Math.max(1, width);
     this.h = Math.max(1, height);
+    this.renderQuality ??= this.w<=600 && this.h>this.w ? 1 : 0;
+    this.resizeBuffer();
+    this.speechSizes = new WeakMap();
+  }
+
+  resizeBuffer() {
     // The scene scales independently of the sharp, CSS-rendered controls and labels.
-    this.dpr = Math.min(2,devicePixelRatio || 1,Math.sqrt(1_650_000/(this.w*this.h)));
+    const {pixelRatio,hallPixelRatio}=WeddingScene.renderSettings[this.renderQuality];
+    const ratio=this.renderingHall?hallPixelRatio:pixelRatio;
+    this.dpr = Math.min(ratio,devicePixelRatio || 1,Math.sqrt(1_650_000/(this.w*this.h)));
     const pixelWidth = Math.round(this.w*this.dpr);
     const pixelHeight = Math.round(this.h*this.dpr);
     if (this.canvas.width !== pixelWidth) this.canvas.width = pixelWidth;
     if (this.canvas.height !== pixelHeight) this.canvas.height = pixelHeight;
-    this.speechSizes = new WeakMap();
+  }
+
+  adaptToFrameTime(interval) {
+    if (interval<=0 || interval>.18) return;
+    this.performanceFrames++;
+    if (interval>.021) this.slowFrames++;
+    if (this.performanceFrames<28) return;
+    const lower = this.slowFrames>=5;
+    this.smoothWindows=this.slowFrames<=1 ? this.smoothWindows+1 : 0;
+    this.performanceFrames=this.slowFrames=0;
+    const previous=this.renderQuality;
+    if (lower) {
+      this.renderQuality=Math.min(WeddingScene.renderSettings.length-1,previous+1);
+      // Avoid retrying a setting that already caused frame drops during this session.
+      this.minimumRenderQuality=this.renderQuality;
+    } else if (this.smoothWindows>=10 && previous>this.minimumRenderQuality) {
+      this.renderQuality=previous-1;
+      this.smoothWindows=0;
+    }
+    if (this.renderQuality!==previous) this.resizeBuffer();
   }
 
   rnd(n) {
@@ -120,8 +175,34 @@ window.WeddingScene = class WeddingScene {
   }
 
   face(points,color) {
-    const world=this.clipped(points);
-    if (world.length>=3) this.poly(world.map(point=>this.project(...point)),color);
+    if (points.length<3) return;
+    const screen=this.faceProjection;
+    let left=Infinity,right=-Infinity,top=Infinity,bottom=-Infinity;
+    for (let i=0;i<points.length;i++) {
+      const point=points[i];
+      const d=this.depth(point[1],point[2]);
+      if (d<.55) {
+        const world=this.clipped(points);
+        if (world.length>=3) this.poly(world.map(point=>this.project(...point)),color);
+        return;
+      }
+      const x=this.cx+(point[0]-this.cameraX)*this.fx/d;
+      const y=this.horizon+(this.eye-point[1])*this.fy/d;
+      screen[2*i]=x;
+      screen[2*i+1]=y;
+      left=Math.min(left,x);
+      right=Math.max(right,x);
+      top=Math.min(top,y);
+      bottom=Math.max(bottom,y);
+    }
+    if (left>this.w || right<0 || top>this.h || bottom<0) return;
+    const g=this.ctx;
+    g.beginPath();
+    g.moveTo(screen[0],screen[1]);
+    for (let i=1;i<points.length;i++) g.lineTo(screen[2*i],screen[2*i+1]);
+    g.closePath();
+    g.fillStyle=color;
+    g.fill();
   }
 
   edge(a,b,color,width) {
@@ -182,7 +263,7 @@ window.WeddingScene = class WeddingScene {
     g.fill();
   }
 
-  plane(x1, x2, z1, z2, y, color) {
+  plane(x1, x2, z1, z2, y, color, offsets) {
     const depth = this.depth(y,0);
     const near = Math.max(.55,Math.min(z1,z2)+depth);
     const far = Math.max(z1,z2)+depth;
@@ -196,11 +277,22 @@ window.WeddingScene = class WeddingScene {
     const g = this.ctx;
     g.fillStyle = color;
     g.beginPath();
-    g.moveTo(this.cx+left/near,low);
-    g.lineTo(this.cx+right/near,low);
-    g.lineTo(this.cx+right/far,high);
-    g.lineTo(this.cx+left/far,high);
-    g.closePath();
+    if (offsets) {
+      for (const x of offsets) {
+        const shift=x*this.fx;
+        g.moveTo(this.cx+(left+shift)/near,low);
+        g.lineTo(this.cx+(right+shift)/near,low);
+        g.lineTo(this.cx+(right+shift)/far,high);
+        g.lineTo(this.cx+(left+shift)/far,high);
+        g.closePath();
+      }
+    } else {
+      g.moveTo(this.cx+left/near,low);
+      g.lineTo(this.cx+right/near,low);
+      g.lineTo(this.cx+right/far,high);
+      g.lineTo(this.cx+left/far,high);
+      g.closePath();
+    }
     g.fill();
   }
 
@@ -212,6 +304,11 @@ window.WeddingScene = class WeddingScene {
     const l = x - width / 2;
     const r = x + width / 2;
     const end=z+length;
+    const cameraX=this.cameraX;
+    const far=this.depth(bottom,end);
+    if (far<.55) return;
+    if (l>cameraX && this.cx+(l-cameraX)*this.fx/far>this.w) return;
+    if (r<cameraX && this.cx+(r-cameraX)*this.fx/far<0) return;
     const cameraZ=this.cameraDepth-6;
     if (this.eye>=top) this.plane(l,r,z,end,top,colors[1]);
     if (this.eye<bottom) this.plane(l,r,z,end,bottom,colors[2]);
@@ -237,9 +334,9 @@ window.WeddingScene = class WeddingScene {
       sky.addColorStop(.57,tone([141,216,241],[213,136,140],[28,42,72]));
       sky.addColorStop(1,tone([223,244,220],[245,167,100],[59,66,95]));
     } else {
-      sky.addColorStop(0, "#a76f5a");
-      sky.addColorStop(.65, "#c78e68");
-      sky.addColorStop(1, "#f8cd97");
+      sky.addColorStop(0, "#9e5540");
+      sky.addColorStop(.65, "#d1995e");
+      sky.addColorStop(1, "#ffe0a1");
     }
     g.fillStyle = sky;
     g.fillRect(0, 0, w, h);
@@ -292,32 +389,43 @@ window.WeddingScene = class WeddingScene {
         this.ellipse(x,horizon+7,size*.90,size*(.76+this.rnd(i)*.46),i%3?"#79ad65":"#93bb72");
       }
     } else {
-      g.fillStyle = "#746753";
+      g.fillStyle = "#805444";
       g.fillRect(0, horizon + 8, w, h);
       this.hallWalls();
     }
   }
 
   hallWalls() {
+    const g=this.ctx;
     const farther=2048;
     const near=this.cameraDepth-7.25;
     const ceiling=9.25;
     const wall=WeddingScene.hallWall;
     for (const side of [-1, 1]) {
       const x = side*wall;
+      const panel = g.createLinearGradient(this.cx+side*this.w*.06,0,
+        side<0?0:this.w,this.h*.19);
+      panel.addColorStop(0,side<0?"#83aa7b":"#b76d69");
+      panel.addColorStop(.47,side<0?"#327956":"#994154");
+      panel.addColorStop(1,side<0?"#134b39":"#681d38");
       const band = (bottom,top,fill) => this.face([[x,bottom,near],[x,bottom,farther],
         [x,top,farther],[x,top,near]],fill);
-      band(0,ceiling,side<0?"#518d79":"#ae6d73");
-      band(0,2.35,side<0?"#3c6d5d":"#8b505c");
-      band(.10,.29,side<0?"#315a4d":"#723e4e");
-      band(2.26,2.38,"#d5a36a");
-      band(2.38,2.42,"#efc892");
-      band(8.35,ceiling,side<0?"#71a28b":"#c18483");
-      band(8.32,8.40,"#e7be88");
+      band(0,ceiling,panel);
+      band(0,2.35,side<0?"#10352866":"#430e2b70");
+      band(.10,.29,side<0?"#10362d":"#511830");
+      band(2.26,2.38,"#a9683f");
+      band(2.38,2.44,"#f6cc78");
+      band(8.35,ceiling,"#2f182640");
+      band(8.32,8.42,"#eac081");
     }
-    this.plane(-wall,wall,near,farther,ceiling,"#efdbc0");
-    for (const x of [-6.9, -4.3, 4.3, 6.9]) {
-      this.edge([x,9.23,near],[x,9.23,farther],"#faf0cf99",2);
+    const plaster=g.createLinearGradient(0,0,0,this.horizon);
+    plaster.addColorStop(0,"#c99268");
+    plaster.addColorStop(.65,"#f0cca1");
+    plaster.addColorStop(1,"#fae0b1");
+    this.plane(-wall,wall,near,farther,ceiling,plaster);
+    for (const x of [-7.4,-4.4,4.4,7.4]) {
+      this.plane(x-.09,x+.09,near,farther,9.23,"#a96d4f80");
+      this.plane(x-.025,x+.025,near,farther,9.22,"#ffe7b9");
     }
   }
 
@@ -576,12 +684,14 @@ window.WeddingScene = class WeddingScene {
 
   gardenCity(distance, entranceZ) {
     const near = Math.max(this.cameraDepth-7,entranceZ);
+    const {sceneryDistance}=WeddingScene.renderSettings[this.renderQuality];
+    const postDistance=Math.min(148,sceneryDistance);
     for (const side of [-1,1]) {
       for (const row of [1,0]) {
         const block = row ? 29 : 19;
         const offset = row ? 12 : 0;
         const first = Math.floor((distance+near-offset)/block);
-        const last = Math.floor((distance+WeddingScene.viewDistance-offset)/block);
+        const last = Math.floor((distance+sceneryDistance-offset)/block);
         for (let index=last;index>=first;index--) {
           const z = index*block+offset-distance;
           if (z < entranceZ && z+block <= entranceZ) continue;
@@ -592,7 +702,8 @@ window.WeddingScene = class WeddingScene {
           const height = row ? 13+this.rnd(seed+11)*14 : 6.5+this.rnd(seed+11)*10;
           const [inner] = this.project(side*edge,0,z+length);
           if (z+length <= near || (side<0 ? inner<0 : inner>this.w)) continue;
-          this.cityBuilding(side*(edge+width/2),Math.max(z,entranceZ),width,z+length-Math.max(z,entranceZ),height,seed,row);
+          this.cityBuilding(side*(edge+width/2),Math.max(z,entranceZ),width,z+length-Math.max(z,entranceZ),
+            height,seed,row,sceneryDistance);
         }
       }
       const edge = side*22.2;
@@ -602,12 +713,12 @@ window.WeddingScene = class WeddingScene {
       this.plane(edge,cap,near,2048,4.15,"#e0d4b8");
       this.face([[edge,3.89,near],[edge,3.89,2048],[edge,4.15,2048],[edge,4.15,near]],"#cbbca0");
       const start = Math.ceil((distance+near)/12)*12;
-      for (let position=start;position<distance+148;position+=12) {
+      for (let position=start;position<distance+postDistance;position+=12) {
         const z = position-distance;
         const [px] = this.project(edge,2,z);
         if (px < -12 || px > this.w+12) continue;
         const g = this.ctx;
-        g.globalAlpha = this.distanceVisibility(z,90,148);
+        g.globalAlpha = this.distanceVisibility(z,Math.min(90,postDistance-40),postDistance);
         this.box(edge,z,.53,.64,0,4.38,["#b3a28a","#e5dbc5","#978a73"]);
         this.box(edge,z-.04,.69,.71,4.15,4.39,["#cfbea4","#e9ddc1","#aa9b81"]);
         g.globalAlpha = 1;
@@ -615,7 +726,7 @@ window.WeddingScene = class WeddingScene {
     }
   }
 
-  cityBuilding(x,z,width,length,height,seed,row) {
+  cityBuilding(x,z,width,length,height,seed,row,sceneryDistance) {
     if (length <= .1) return;
     const g = this.ctx;
     const palette = [
@@ -626,7 +737,7 @@ window.WeddingScene = class WeddingScene {
       ["#969fa9","#bdc5c9","#808c96","#657c89"]
     ][Math.floor(this.rnd(seed+5)*5)];
     g.save();
-    g.globalAlpha *= this.distanceVisibility(z,135);
+    g.globalAlpha *= this.distanceVisibility(z,Math.min(135,sceneryDistance-46),sceneryDistance);
     this.box(x,z,width,length,0,height,palette);
     const x1 = x-width/2;
     const x2 = x+width/2;
@@ -643,7 +754,7 @@ window.WeddingScene = class WeddingScene {
         this.box(x,z+length*.25,width*.64,length*.47,height,height+2.3,palette);
       }
     }
-    const detail = this.distanceVisibility(z,75,135);
+    const detail = this.distanceVisibility(z,Math.min(75,sceneryDistance-49),Math.min(135,sceneryDistance-12));
     g.globalAlpha *= detail;
     if (detail > 0) {
       const stepped = this.rnd(seed+14)<.55;
@@ -664,8 +775,15 @@ window.WeddingScene = class WeddingScene {
   }
 
   ground(distance, garden, far=2048, railEnd=far) {
-    const edge = garden ? "#baa987" : "#d3c2a4";
+    const edge = garden ? "#baa987" : "#edbd76";
     const near=this.cameraDepth-7.1;
+    const floorPaint=(farColor,midColor,nearColor) => {
+      const gradient=this.ctx.createLinearGradient(0,this.horizon,0,this.h);
+      gradient.addColorStop(0,farColor);
+      gradient.addColorStop(.32,midColor);
+      gradient.addColorStop(1,nearColor);
+      return gradient;
+    };
     if (garden) {
       for (const side of [-1,1]) {
         this.plane(side*8.6,side*13.7,near,far,.003,"#8dc265");
@@ -674,15 +792,21 @@ window.WeddingScene = class WeddingScene {
         this.plane(side*11.08,side*12.38,near,far,.009,"#f3e3bf");
       }
     }
-    this.plane(-7.6,7.6,near,far,0,garden?"#e3c792":"#dbb48e");
-    this.plane(-4.15,4.15,near,far,.012,garden?"#51574d":"#5b4946");
-    this.plane(-1.42,1.42,near,far,.016,garden?"#9e784f":"#9b5447");
+    this.plane(-7.6,7.6,near,far,0,garden?"#e3c792":floorPaint("#f0c990","#ce9863","#a46d4e"));
+    this.plane(-4.15,4.15,near,far,.012,garden?"#51574d":floorPaint("#8b6457","#5a4343","#3e3037"));
+    this.plane(-1.42,1.42,near,far,.016,garden?"#9e784f":floorPaint("#b97864","#91434f","#64253b"));
     for (const side of [-1, 1]) {
+      if (!garden) {
+        this.plane(side*1.23,side*1.29,near,far,.020,"#d697717f");
+        this.plane(side*4.35,side*4.54,near,far,.023,"#7e42414a");
+        this.plane(side*6.63,side*7.6,near,far,.020,"#75453d40");
+      }
       this.plane(side*4.19,side*4.29,near,far,.025,edge);
-      this.plane(side*4.48,side*4.51,near,far,.026,"#faf0ce");
+      this.plane(side*4.48,side*4.51,near,far,.026,garden?"#faf0ce":"#ffe1a9");
       this.plane(side*7.30,side*7.38,near,far,.027,edge);
     }
     const spacing = 2.2;
+    const lanes = [-2.65,0,2.65];
     const origin = Math.floor((distance+Math.min(122,far))/spacing)*spacing;
     this.ctx.save();
     for (let absolute = origin; absolute > distance + near; absolute -= spacing) {
@@ -694,17 +818,15 @@ window.WeddingScene = class WeddingScene {
         this.plane(4.35,7.28,z,z+.07,.025,"#f7e8be7b");
       }
       if (z>=railEnd) continue;
-      for (const x of [-2.65, 0, 2.65]) {
-        this.plane(x-.93,x+.93,z,z+.20,.045,"#3f3a32");
-        if (z<70) this.plane(x-.9,x+.9,z+.13,z+.19,.049,"#927f65");
-      }
+      this.plane(-.93,.93,z,z+.20,.045,"#3f3a32",lanes);
+      if (z<70) this.plane(-.9,.9,z+.13,z+.19,.049,"#927f65",lanes);
     }
     this.ctx.restore();
     if (railEnd<=near) return;
     for (const x of [-2.65, 0, 2.65]) {
       for (const rail of [x-.72, x+.72]) {
         this.plane(rail-.056,rail+.056,near,railEnd,.058,"#3b3f38");
-        this.plane(rail-.024,rail+.038,near,railEnd,.074,garden?"#ffe1aa":"#ebddc0");
+        this.plane(rail-.024,rail+.038,near,railEnd,.074,garden?"#ffe1aa":"#f3dcb5");
       }
     }
   }
@@ -854,36 +976,53 @@ window.WeddingScene = class WeddingScene {
     g.restore();
   }
 
-  chandelier(z, size = 1) {
+  chandelier(z, time) {
     // Blend the lights out before they enter the chase camera's near field.
     const fadeStart=7.5+this.cameraRise*15;
     const opacity=Math.min(1,Math.max(0,(z-fadeStart)/8));
     if (opacity<=0) return;
     const [x, y] = this.project(0,8.12,z);
     const [, roof] = this.project(0,9.25,z);
-    const s = this.fy / (z + 6) * size;
+    const s = this.fy / (z + 6);
+    const u = this.fx / (z + 6);
     const g = this.ctx;
     if (y < -3 * s || s < 3) return;
     g.save();
     g.globalAlpha *= opacity*opacity*(3-2*opacity)*this.distanceVisibility(z,80,145);
-    g.drawImage(this.lampGlow,x-1.76*s,y-1.46*s,3.52*s,3.52*s);
-    this.line([[x, roof], [x, y+.52*s]], "#eac38e", Math.max(1, s*.035));
-    g.strokeStyle = "#ffd4a0";
-    g.lineWidth = Math.max(1, s*.028);
-    g.beginPath();
-    g.ellipse(x, y, s*.96, s*.19, 0, 0, Math.PI);
-    g.stroke();
-    g.beginPath();
-    g.ellipse(x, y+.25*s, s*.56, s*.15, 0, 0, Math.PI);
-    g.stroke();
-    for (let i = -3; i <= 3; i++) {
-      const bx = x + i * .284 * s;
-      const by = y + (3-Math.abs(i)) * .045 * s;
-      this.line([[bx, by], [bx, by-.22*s]], "#a66b65", Math.max(1,s*.029));
-      this.ellipse(bx, by-.24*s, .052*s, .111*s, "#ffe0aa");
-      this.ellipse(bx, by+.19*s, .044*s, .077*s, "#f7b4ad");
+    if (u<8) {
+      this.line([[x,roof],[x,y+.28*s]],"#bd854c",1);
+      this.ellipse(x,y+.17*s,u*1.25,s*.11,"#e3ac69");
+      this.ellipse(x,y,u*.95,s*.088,"#fff2b9");
+      g.restore();
+      return;
     }
-    this.ellipse(x, y+.51*s, .077*s, .108*s, "#ffd1a3");
+    g.drawImage(this.lampGlow,x-2.20*u,y-1.53*s,4.4*u,3.32*s);
+    this.line([[x, roof], [x, y+.52*s]], "#bd854c", Math.max(1, u*.067));
+    this.ellipse(x,roof,u*.24,s*.052,"#dba864");
+    const gold=g.createLinearGradient(x-u,0,x+u,0);
+    gold.addColorStop(0,"#a96b42");
+    gold.addColorStop(.43,"#ffe6aa");
+    gold.addColorStop(1,"#c98f51");
+    g.strokeStyle=gold;
+    g.lineWidth=Math.max(1,u*.055);
+    for (const [dy,rx,ry] of [[0,1.38,.16],[.30,.73,.12]]) {
+      g.beginPath();
+      g.ellipse(x,y+dy*s,u*rx,s*ry,0,0,Math.PI);
+      g.stroke();
+    }
+    g.beginPath();
+    g.moveTo(x-u*1.08,y+.12*s);
+    g.quadraticCurveTo(x-u*.77,y+.50*s,x,y+.50*s);
+    g.quadraticCurveTo(x+u*.77,y+.50*s,x+u*1.08,y+.12*s);
+    g.stroke();
+    for (let i=-4;i<=4;i++) {
+      const bx=x+i*.311*u;
+      const by=y+(4-Math.abs(i))*.036*s;
+      this.line([[bx,by],[bx,by-.19*s]],"#c58c51",Math.max(.7,u*.042));
+      this.hallBulb(bx,by-.24*s,Math.max(.55,u*.059),time*1.9+i*.6);
+      this.ellipse(bx,by+.12*s,u*.032,s*.065,"#ffeac6");
+    }
+    this.ellipse(x,y+.59*s,u*.079,s*.108,"#ffe6a9");
     g.restore();
   }
 
@@ -925,6 +1064,21 @@ window.WeddingScene = class WeddingScene {
     return canvas;
   }
 
+  makeHallLight() {
+    const sprite = document.createElement("canvas");
+    sprite.width = sprite.height = 48;
+    const g = sprite.getContext("2d");
+    g.fillStyle = "#efb664";
+    g.beginPath();
+    g.ellipse(24,24,20,24,0,0,2*Math.PI);
+    g.fill();
+    g.fillStyle = "#fff4c3";
+    g.beginPath();
+    g.ellipse(24,20.2,12.6,13.8,0,0,2*Math.PI);
+    g.fill();
+    return sprite;
+  }
+
   makeBouquet(seed) {
     const canvas = document.createElement("canvas");
     canvas.width = 120;
@@ -954,6 +1108,89 @@ window.WeddingScene = class WeddingScene {
     const width = sprite.width*size/22;
     const height = sprite.height*size/22;
     this.ctx.drawImage(sprite,x-width/2,y-height/2,width,height);
+  }
+
+  makeHallFlowers(variant) {
+    const sprite=document.createElement("canvas");
+    sprite.width=240;
+    sprite.height=160;
+    const g=sprite.getContext("2d");
+    const seed=variant*37;
+    const foliage=g.createLinearGradient(0,25,0,145);
+    foliage.addColorStop(0,"#85a95b");
+    foliage.addColorStop(.36,"#397e4c");
+    foliage.addColorStop(1,"#123b31");
+    const leaf=new Path2D("M 0 0 Q 8 -14 31 0 Q 10 14 0 0");
+    const greenery=["#1a543b","#2b7246","#52914f",foliage,"#7caa5b"];
+    for (let i=0;i<40;i++) {
+      const angle=i*2.4;
+      const spread=.43+this.rnd(seed+i*1.63)*.59;
+      const x=120+Math.cos(angle)*108*spread;
+      const y=80+Math.sin(angle)*53*spread;
+      g.save();
+      g.translate(x,y);
+      g.rotate(angle+this.rnd(i+14)-.5);
+      g.scale(.62+this.rnd(i+26)*.75,.60+this.rnd(i)*.46);
+      g.translate(-19,0);
+      g.fillStyle=greenery[i%greenery.length];
+      g.fill(leaf);
+      g.strokeStyle="#d6d98955";
+      g.lineWidth=1.05;
+      g.beginPath();
+      g.moveTo(3,0);
+      g.quadraticCurveTo(17,-2,28,0);
+      g.stroke();
+      g.restore();
+    }
+    const colors=[
+      ["#dab68c","#fff3d5","#fffbee","#c38e57"],
+      ["#af5762","#f4bac0","#ffe1d0","#a95765"],
+      ["#64203c","#ac3554","#e46e84","#731e42"]
+    ];
+    const mix=[[0,0,1,0,2],[1,0,2,1,0],[2,1,0,2,0]][variant];
+    for (let i=0;i<17;i++) {
+      const angle=i*2.4+.5;
+      const spread=Math.sqrt((17-i)/17);
+      const x=120+Math.cos(angle)*83*spread;
+      const y=81+Math.sin(angle)*45*spread;
+      const r=(i<7?8:10)+this.rnd(seed+i*9)*9;
+      const [shadow,body,edge,center]=colors[mix[i%mix.length]];
+      g.beginPath();
+      g.ellipse(x+1,y+3,r*1.12,r*.94,angle,0,Math.PI*2);
+      g.fillStyle="#24251e88";
+      g.fill();
+      for (let petal=0;petal<5;petal++) {
+        const a=angle+petal*Math.PI*.4;
+        const px=x+Math.cos(a)*r*.48;
+        const py=y+Math.sin(a)*r*.43;
+        g.beginPath();
+        g.ellipse(px,py,r*.56,r*.63,a,0,Math.PI*2);
+        g.fillStyle=petal%3===0?shadow:body;
+        g.fill();
+        g.strokeStyle=edge;
+        g.lineWidth=1.2;
+        g.stroke();
+      }
+      g.beginPath();
+      g.arc(x,y,r*.43,0,Math.PI*2);
+      g.fillStyle=edge;
+      g.fill();
+      g.beginPath();
+      g.arc(x+1,y,r*.20,0,Math.PI*2);
+      g.fillStyle=center;
+      g.fill();
+    }
+    return sprite;
+  }
+
+  hallArrangement(x,y,z,width,height,variant) {
+    const depth=this.depth(y,z);
+    if (depth<.55) return;
+    const [px,py]=this.project(x,y,z);
+    const w=this.fx*width/depth;
+    const h=this.fy*height/depth;
+    if (px+w/2<0 || px-w/2>this.w || py+h/2<0 || py-h/2>this.h) return;
+    this.ctx.drawImage(this.hallFlowers[variant],px-w/2,py-h/2,w,h);
   }
 
   makeWallOrnament(rose) {
@@ -1022,10 +1259,12 @@ window.WeddingScene = class WeddingScene {
     return sprite;
   }
 
-  hallSection(z, seed, gallerySide) {
-    const detail = this.distanceVisibility(z,52,84);
+  hallSection(z, seed, gallerySide, detailScale) {
+    const detail = this.distanceVisibility(z,52*detailScale,84*detailScale);
     for (const side of [-1,1]) {
       if (side === gallerySide) continue;
+      const [innerEdge]=this.project(side*5.92,0,z+.82);
+      if (side<0 ? innerEdge<0 : innerEdge>this.w) continue;
       const x=side*6.87;
       const curtainX=x+side*.39;
       const curtainZ=z+.80;
@@ -1033,10 +1272,10 @@ window.WeddingScene = class WeddingScene {
       const [,floor]=this.project(x,0,z);
       const u=this.fx/(z+6);
       const curtains=[
-        ["#f7f1e4","#fffbec","#d7c9b1"],
-        ["#e2eedb","#f8f7e6","#b7bea3"],
-        ["#f1d3ca","#fff0dc","#d4a797"]
-      ][(seed+Number(side>0))%3];
+        ["#eac899","#fff3d4","#b98860"],
+        ["#9a3651","#c66271","#651b3a"],
+        ["#edbdac","#ffe7cf","#bd8173"]
+      ][((seed+Number(side>0))%3+3)%3];
       const drape=(amount,y)=>this.project(curtainX+side*amount,y,curtainZ);
       const top=(i)=>-1.25+i*.32;
       const tie=(i)=>-.13+i*.141;
@@ -1055,20 +1294,21 @@ window.WeddingScene = class WeddingScene {
           drape(hem(i+1),.12),drape(hem(i),.12),drape(tie(i),3.30)
         ],curtains[[0,1,0,2,0,1,0][i]]);
       }
-      this.line([drape(-1.29,8.67),drape(1.02,8.67)],"#d1ad7d",Math.max(1,u*.047));
-      this.line([drape(-.12,3.33),drape(.86,3.29)],"#bc9461",Math.max(1,u*.044));
-      this.box(x,z,.35,.50,0,8.82,["#f4ebd5","#fffae9","#b4a58d"]);
-      this.front(x-.208,x+.208,0,.24,z-.04,"#ece2cb");
-      this.front(x-.264,x+.264,8.46,8.75,z-.04,"#f7f0df");
+      this.line([drape(-1.29,8.67),drape(1.02,8.67)],"#f4cc7d",Math.max(1,u*.047));
+      this.line([drape(-.12,3.33),drape(.86,3.29)],"#f4c678",Math.max(1,u*.054));
+      this.box(x,z,.35,.50,0,8.82,["#f3e0bc","#fff3d2","#aa866c"]);
+      this.front(x-.208,x+.208,0,.24,z-.04,"#d3b48e");
+      this.front(x-.264,x+.264,8.46,8.75,z-.04,"#f4deb8");
+      this.front(x-.267,x+.267,8.46,8.51,z-.05,"#c88c51");
       this.line([[columnX-u*.07,columnTop+u*.35],[columnX-u*.07,floor-u*.30]],"#fff9e6",Math.max(1,u*.019));
       this.front(x-.080,x+.080,2.31,2.67,z-.05,"#edc58a");
       this.front(x-.049,x+.049,2.37,2.62,z-.059,"#fff6d8");
-      if (seed%2===0) this.hallSwag(x-side*.28,z-.13,seed);
+      if (seed%2===0) this.hallSwag(x-side*.28,z-.13);
       this.ctx.globalAlpha = opacity;
     }
   }
 
-  hallSwag(x,z,seed) {
+  hallSwag(x,z) {
     const depth=this.depth(6.18,z);
     if (depth<.55) return;
     const g = this.ctx;
@@ -1082,9 +1322,176 @@ window.WeddingScene = class WeddingScene {
       g.ellipse(px+side*u*.15,py+s*.22,u*.23,s*.29,0,0,2*Math.PI);
       g.stroke();
       this.poly([[px,py-s*.08],[px+side*u*.42,py+s*.44],[px+side*u*.27,py+s*.37],
-        [px+side*u*.24,py+s*.53]],"#ba7b7a");
+        [px+side*u*.24,py+s*.53]],"#ab2f55");
     }
-    this.bouquet(px,py-s*.095,s*.19,seed+3);
+    this.hallArrangement(x,6.28,z,1.26,.72,0);
+  }
+
+  hallBay(x,z,variant,covered,time,detailScale) {
+    const side=Math.sign(x);
+    const depth=this.depth(7.3,z);
+    if (this.depth(7.3,z-3.85)<.55) return;
+    const [edge]=this.project(x-side*.85,7.3,z+3.85);
+    if (side<0 ? edge<0 : edge>this.w) return;
+    const g=this.ctx;
+    const u=this.fx/depth;
+    const s=this.fy/depth;
+    const point=(t,y)=>this.project(x,y,z+t*3.85);
+    const detailed=u>=10/detailScale;
+    const steps=detailed?10:4;
+    const swag=Array.from({length:steps+1},(_,i)=> {
+      const t=2*i/steps-1;
+      return [t,7.82-(1-t*t)*.55];
+    });
+    const outline=swag.map(([t,y])=>point(t,y));
+    this.poly(outline.concat(swag.slice().reverse().map(([t,y])=>point(t,y-.42*(1-t*t)-.06))),
+      variant===1?"#f4d4a1":"#9f3855");
+    this.line(outline,"#ffdb8b",Math.max(.65,u*.027));
+    const lower=swag.map(([t,y])=>point(t,y-.54*(1-t*t)-.07));
+    this.line(lower,"#4e3029",Math.max(.6,u*.024));
+    for (let i=1;i<steps;i+=2) {
+      const [px,py]=lower[i];
+      this.hallBulb(px,py,Math.max(.48,s*.043),time+i*.83+z*.02);
+    }
+    this.hallArrangement(x,7.67,z+3.38,1.39,.76,variant);
+    if (detailed) this.hallArrangement(x,7.51,z-2.82,1.12,.71,(variant+1)%3);
+    if (covered) return;
+
+    const [px,py]=this.project(x-side*.12,4.74,z+.65);
+    if (!detailed) {
+      this.ellipse(px,py,u*.20,s*.13,"#edba76");
+      return;
+    }
+    const glow=s*.66;
+    g.drawImage(this.lampGlow,px-glow,py-glow,glow*2,glow*2);
+    this.ellipse(px+side*u*.06,py+s*.20,u*.17,s*.36,"#40182b79");
+    this.ellipse(px,py+s*.15,u*.142,s*.32,"#c4894c");
+    this.ellipse(px-side*u*.018,py+s*.10,u*.082,s*.22,"#ffe0a2");
+    this.poly([[px-u*.24,py-s*.19],[px+u*.24,py-s*.19],[px+u*.16,py+s*.06],[px-u*.16,py+s*.06]],
+      "#ffe2aa");
+    this.line([[px-u*.24,py-s*.19],[px+u*.24,py-s*.19]],"#af7246",Math.max(.7,s*.033));
+    this.hallBulb(px,py-s*.047,Math.max(.6,s*.057),time+variant);
+  }
+
+  hallBulb(x,y,radius,phase) {
+    const g=this.ctx;
+    const extent=radius*(radius>1.25?4.1:1.2);
+    if (x+extent<0 || x-extent>this.w || y+extent<0 || y-extent>this.h) return;
+    const opacity=g.globalAlpha;
+    if (radius>1.25) {
+      g.globalAlpha*=.76+.22*Math.sin(phase);
+      g.drawImage(this.lampGlow,x-extent,y-extent,extent*2,extent*2);
+    }
+    g.drawImage(this.hallLight,x-radius*1.2,y-radius*1.2,radius*2.4,radius*2.4);
+    if (radius>1.25) g.globalAlpha=opacity;
+  }
+
+  hallPlanter(x,z,variant) {
+    const d=this.depth(0,z);
+    if (d<.55) return;
+    const [px,py]=this.project(x,0,z);
+    const u=this.fx/d;
+    const s=this.fy/d;
+    if (px+u<0 || px-u>this.w || py-s*2.75>this.h) return;
+    const [neck,crown]=this.project(x,1.47,z);
+    const g=this.ctx;
+    const brass=g.createLinearGradient(neck-u*.37,0,neck+u*.37,0);
+    brass.addColorStop(0,"#88502e");
+    brass.addColorStop(.26,"#d09651");
+    brass.addColorStop(.50,"#ffe1a1");
+    brass.addColorStop(.73,"#d99a50");
+    brass.addColorStop(1,"#865031");
+    this.ellipse(px,py,u*.78,s*.19,"#4b283250");
+    this.box(x,z,.54,.53,.04,.69,["#a45e4f","#edc68c","#743c40"]);
+    this.box(x,z-.038,.67,.60,.64,.77,["#dca967","#ffdea0","#a36541"]);
+    g.beginPath();
+    g.moveTo(neck-u*.38,crown);
+    g.bezierCurveTo(neck-u*.37,crown+s*.34,neck-u*.15,crown+s*.28,px-u*.13,py-s*.78);
+    g.lineTo(px+u*.13,py-s*.78);
+    g.bezierCurveTo(neck+u*.15,crown+s*.28,neck+u*.37,crown+s*.34,neck+u*.38,crown);
+    g.closePath();
+    g.fillStyle=brass;
+    g.fill();
+    this.ellipse(neck,crown,u*.40,s*.087,"#eec183");
+    this.ellipse(neck,crown,u*.35,s*.046,"#553322");
+    this.hallArrangement(x,1.87,z+.06,2.18,1.44,variant);
+  }
+
+  hallFloorLight(x,z) {
+    const depth=this.depth(.02,z);
+    if (depth<1) return;
+    const [px,py]=this.project(x,.02,z);
+    const width=this.fx/depth*1.16;
+    const height=this.fy/depth*Math.min(.66,3.2/depth);
+    if (px+width<0 || px-width>this.w || py-height>this.h) return;
+    this.ctx.drawImage(this.lampGlow,px-width,py-height,2*width,2*height);
+  }
+
+  hallCanopy(z,variant,time,detailScale) {
+    const g=this.ctx;
+    const depth=this.depth(8.55,z);
+    if (depth<.55 || (variant===1 && this.project(0,7,z)[1]<-8)) return;
+    const s=this.fy/depth;
+    const u=this.fx/depth;
+    const detailed=u>=8/detailScale;
+    const half=variant===1?6.92:5.62;
+    const metal=g.createLinearGradient(0,this.project(0,8.65,z)[1],0,this.project(0,3.7,z)[1]);
+    metal.addColorStop(0,"#fff1ba");
+    metal.addColorStop(.34,"#d79850");
+    metal.addColorStop(.73,"#f6cd83");
+    metal.addColorStop(1,"#a76342");
+    if (variant!==1) {
+      const archSteps=detailed?20:10;
+      const arch=Array.from({length:archSteps+1},(_,i)=>{
+        const x=(2*i/archSteps-1)*half;
+        const y=6.14+2.41*Math.sqrt(Math.max(0,1-(x/half)**2));
+        return this.project(x,y,z);
+      });
+      const frame=[this.project(-half,.22,z),...arch,this.project(half,.22,z)];
+      this.line(frame,"#6c3e33",Math.max(1.4,u*.17));
+      this.line(frame,metal,Math.max(.8,u*.105));
+      if (detailed) this.line(arch.map(([x,y])=>[x,y+s*.144]),"#ffe4a7",Math.max(.6,u*.029));
+      for (const side of [-1,1]) {
+        if (detailed) {
+          this.box(side*half,z-.20,.56,.48,0,.46,["#c99461","#ffe0a5","#89513d"]);
+          this.box(side*half,z-.226,.68,.53,.37,.49,["#dbab70","#ffe7aa","#b9794a"]);
+          this.hallArrangement(side*5.49,5.99,z-.13,2.02,1.86,variant);
+        }
+        this.hallArrangement(side*4.61,7.62,z-.15,2.63,1.34,variant);
+        if (detailed) this.hallArrangement(side*3.25,8.11,z-.19,2.30,1.18,(variant+1)%3);
+      }
+      this.hallArrangement(-.17,8.46,z-.24,2.64,1.12,1);
+    }
+
+    for (const side of [-1,1]) {
+      const anchor=side*half;
+      const center=side*.13;
+      const cloth=[];
+      const hem=[];
+      const seam=[];
+      const cord=[];
+      const clothSteps=detailed?12:6;
+      for (let i=0;i<=clothSteps;i++) {
+        const t=i/clothSteps;
+        const sag=Math.sin(Math.PI*t);
+        const x=anchor+(center-anchor)*t;
+        const y=8.28+t*.20-sag*(variant===1?.85:.54);
+        cloth.push(this.project(x,y,z-.29));
+        if (detailed) seam.push(this.project(x,y-sag*.14,z-.30));
+        hem.push(this.project(x,y-sag*(variant===1?.47:.30)-.06,z-.31));
+        cord.push(this.project(x,y-sag*.53-.32,z-.37));
+      }
+      const clothColor=variant===1?"#ac3b5b":variant===2?"#ecb7a3":"#f6d6a7";
+      this.poly(cloth.concat(hem.slice().reverse()),clothColor);
+      if (detailed) this.poly(cloth.concat(seam.slice().reverse()),variant===1?"#dc7483":"#fff0cd");
+      this.line(hem,metal,Math.max(.7,u*.033));
+      this.line(cord,"#825642",Math.max(.6,u*.023));
+      for (let i=1;i<cord.length;i+=2) {
+        this.hallBulb(...cord[i],Math.max(.47,s*.050),time*2.1+i*.9+variant);
+      }
+      if (variant===1 && detailed) this.hallArrangement(anchor,8.22,z-.36,2.18,1.36,1);
+    }
+    if (variant===1) this.hallArrangement(0,8.42,z-.42,2.52,1.20,0);
   }
 
   hallTable(z,seed,positions=[-5.38,5.38]) {
@@ -1165,7 +1572,7 @@ window.WeddingScene = class WeddingScene {
     this.box(x,z,.30,.34,0,treeHeight,["#8d6b47","#b38d5e","#6f5d3e"]);
     const g = this.ctx;
     const opacity = g.globalAlpha;
-    const detail = Math.min(1,Math.max(0,(s-7)/3));
+    const detail = Math.min(1,Math.max(0,(s-(this.renderQuality===2?10:7))/3));
     if (detail < 1) {
       const [topX,topY]=this.project(x,treeHeight-.45,z);
       g.globalAlpha = opacity*(1-detail);
@@ -1243,18 +1650,37 @@ window.WeddingScene = class WeddingScene {
     const u=this.fx/d*size;
     const [px,py]=this.project(x,.07,z);
     if (py-s*.85>this.h || px+u*1.48<0 || px-u*1.48>this.w) return;
+    if (s<24) {
+      this.ctx.drawImage(this.gardenFlowerBeds[((seed%3)+3)%3],px-u*96/76,py-s*65/76,u*192/76,s*100/76);
+      return;
+    }
+    this.paintGardenFlowerBed(x,z,seed,size,s,u,px,py);
+  }
+
+  makeGardenFlowerBeds() {
+    return [0,1,2].map(seed=>{
+      const image=document.createElement("canvas");
+      image.width=192;
+      image.height=100;
+      const painter={ctx:image.getContext("2d"),ellipse:this.ellipse,rnd:this.rnd,
+        project(x,y,z) { return [96+x*76,65-(y-.07)*76-z*9]; }};
+      this.paintGardenFlowerBed.call(painter,0,0,seed,1,76,76,96,65);
+      return image;
+    });
+  }
+
+  paintGardenFlowerBed(x,z,seed,size,s,u,px,py) {
     this.ellipse(px,py+s*.045,u*1.18,s*.39,"#71684f42");
     this.ellipse(px,py-s*.049,u*1.13,s*.37,"#c4a785");
     this.ellipse(px,py-s*.11,u*1.02,s*.31,"#559953");
     const petals=seed%3===0?["#fff6df","#ee8f7d","#f1c49d"]:["#fff2dd","#ee7d93","#f6cf69"];
-    const detailed = s>=15;
-    for (let i=0;i<(detailed?9:5);i++) {
+    for (let i=0;i<9;i++) {
       const [fx,fy]=this.project(x+(this.rnd(seed+i*.97)-.5)*1.66*size,
         (.17+this.rnd(seed*1.4+i)*.31)*size,z+(this.rnd(i+seed*.13)-.5)*.96*size);
       const radius=s*(.048+this.rnd(i)*.053);
-      if (detailed) this.ellipse(fx-u*.049,fy+s*.028,u*.097,s*.043,"#527e56");
+      this.ellipse(fx-u*.049,fy+s*.028,u*.097,s*.043,"#527e56");
       this.ellipse(fx,fy,radius,radius*.76,petals[i%3]);
-      if (detailed) this.ellipse(fx,fy,radius*.31,radius*.24,"#d89f6d");
+      this.ellipse(fx,fy,radius*.31,radius*.24,"#d89f6d");
     }
   }
 
@@ -1429,7 +1855,7 @@ window.WeddingScene = class WeddingScene {
       const [cos,sin]=WeddingScene.archCurve[i];
       return [(frame+(inner?-.14:.14))*cos,spring+(inner?1.58:1.88)*sin,z+depth];
     };
-    if (this.fy/d<14) {
+    if (this.fy/d<(this.renderQuality===2?36:26)) {
       const band = [];
       for (let i=0;i<=18;i+=2) band.push(beam(i,false,0));
       for (let i=18;i>=0;i-=2) band.push(beam(i,true,0));
@@ -1534,39 +1960,26 @@ window.WeddingScene = class WeddingScene {
   truck(entity, z, canJump = false) {
     const x = entity.lane * 2.65;
     const g = this.ctx;
-    const palette = [
-      ["#1c8b91","#58c9bf","#25505d","VOLVO"],
-      ["#af435b","#ef897c","#68354b","SCANIA"],
-      ["#435a9f","#849fe6","#313d6b","MAN"],
-      ["#c17b40","#f0b475","#75443b","КАМАЗ"]
-    ][entity.brand % 4];
+    const brand=entity.brand%WeddingScene.truckStyles.length;
+    const paint=WeddingScene.truckStyles[brand];
     const end=z+(entity.length??11.8);
     if (this.depth(.07,end)<.55) return;
-    const trailer=z+1.74;
-    this.plane(x-1.17,x+1.17,z,end,.08,"#261f30bb");
-    this.box(x,z+.12,2.01,end-z-.16,.28,.64,["#2b2937","#4d4050","#252433"]);
-    for (const side of [-1,1]) {
-      for (const axle of [z+.13,end-2.24,end-1.11]) {
-        this.box(x+side*.89,axle,.39,.95,.07,.75,["#25222f","#655261","#201d2a"]);
-      }
-    }
-    this.box(x,trailer,2.10,end-trailer,.65,2.36,[palette[2],palette[1],palette[2]]);
-    for (let rib=trailer+.54;rib<end-.18;rib+=.79) {
-      this.plane(x-.99,x+.99,rib,rib+.035,2.365,"#fff2d369");
-    }
-    for (const side of [-1,1]) {
-      const stripe=x+side*.91;
-      this.plane(stripe-.027,stripe+.027,trailer,end,2.37,"#fff0c3");
-      const edge=x+side*1.051;
-      if ((this.cameraX-edge)*side>0) {
-        this.face([[edge,.77,trailer+.14],[edge,.83,trailer+.14],[edge,.83,end-.05],[edge,.77,end-.05]],"#f7d7aa9e");
-        for (let rib=trailer+1.0;rib<end-.2;rib+=1.29) {
-          this.face([[edge,.86,rib],[edge,2.32,rib],[edge,2.32,rib+.028],[edge,.86,rib+.028]],"#fff0d433");
+    const projectedWidth=2.1*this.fx/Math.max(.55,this.depth(1.18,z));
+    const near=projectedWidth>=22;
+    const distant=projectedWidth<14;
+    if (!distant) this.plane(x-1.19,x+1.19,z-.21,end+.15,.08,"#231c2a65");
+    this.plane(x-.98,x+.98,z,end,.083,"#20192669");
+    this.box(x,z+.12,1.64,end-z-.18,.37,.67,["#292c36","#454953","#20252f"]);
+    if (!distant) {
+      for (const side of [-1,1]) {
+        for (const axle of [z+.70,z+2.08,end-2.05,end-.89]) {
+          this.truckWheel(x,axle,side,near);
         }
+        if (near) this.box(x+side*.86,z+1.24,.29,.59,.38,.63,["#5d6774","#85929e","#363f49"]);
       }
     }
-    this.box(x,z,2.04,1.76,.52,2.36,palette);
-    if (this.depth(2.36,z-.09)>=.55 && z>=this.cameraDepth-6) this.truckFront(x,z,palette);
+    this.truckTrailer(x,z+1.80,end,paint,near,distant);
+    this.truckCab(x,z,paint,brand,near,distant);
     if (entity.ramp) this.ramp(x,z,entity.ramp);
     else if (canJump) {
       const [tipX,tipY]=this.project(x,2.91,z);
@@ -1578,30 +1991,231 @@ window.WeddingScene = class WeddingScene {
     }
   }
 
-  truckFront(x,z,palette) {
-    const g=this.ctx;
-    this.front(x-.93,x+.93,2.19,2.3,z-.02,palette[1]);
-    this.front(x-.88,x+.88,1.35,2.11,z-.025,"#191e31");
-    const l=x-.81, r=x+.81;
-    this.face([[l,1.46,z-.06],[r,1.46,z-.06],[r-.1,2.03,z-.06],[l+.1,2.03,z-.06]],"#476378");
-    this.face([[l+.05,1.53,z-.08],[x-.47,1.53,z-.08],[x+.29,2.03,z-.08],[x+.01,2.03,z-.08]],"#b7d1cc66");
-    this.front(x-.018,x+.018,1.43,2.02,z-.09,"#27273a");
-    for (const side of [-1,1]) {
-      this.front(x+side*1.05-.09,x+side*1.05+.09,1.54,1.82,z+.14,"#252237");
-      this.front(x+side*.78-.19,x+side*.78+.19,.65,.84,z-.04,"#fff1bd");
-      this.front(x+side*.78-.19,x+side*.78+.19,.59,.64,z-.05,"#f39665");
+  truckWheel(x, z, side, near) {
+    this.box(x+side*.87,z-.34,.35,.68,.055,.72,["#232735","#3f4654","#1d212e"]);
+    const edge=x+side*1.047;
+    if (!near || (this.cameraX-edge)*side<=0 || this.depth(.77,z-.38)<.55) return;
+    this.sticker([
+      this.project(edge,.77,z-.38),this.project(edge,.77,z+.38),
+      this.project(edge,.01,z+.38),this.project(edge,.01,z-.38)
+    ],this.truckHub);
+  }
+
+  makeTruckHub() {
+    const image=document.createElement("canvas");
+    image.width=image.height=96;
+    const painter={ctx:image.getContext("2d"),ellipse:this.ellipse};
+    for (const [radius,color] of [[48,"#1a1e28"],[38,"#313945"],[29,"#9ca6ab"],
+      [22,"#4b5b67"],[12,"#d2d4c9"]]) {
+      painter.ellipse(48,48,radius,radius,color);
     }
-    this.front(x-.55,x+.55,.58,1.27,z-.05,"#262135");
-    for (let i=0;i<4;i++) this.front(x-.48,x+.48,.61+i*.077,.642+i*.077,z-.07,"#7f6876");
-    this.front(x-1.01,x+1.01,.36,.55,z-.075,"#928391");
-    this.front(x-.43,x+.43,.40,.485,z-.09,"#ded3c9");
-    const [px,py]=this.project(x,1.105,z-.08);
-    const logoSize = Math.max(5, Math.min(this.fx*.255/(z+6), this.fy*.235/(z+6)));
-    g.font = "900 " + logoSize + "px Arial, sans-serif";
-    g.textAlign = "center";
-    g.textBaseline = "middle";
-    g.fillStyle = "#fff2d5";
-    g.fillText(palette[3],px,py);
+    for (let i=0;i<6;i++) {
+      const angle=i*Math.PI/3;
+      painter.ellipse(48+Math.cos(angle)*19.4,48+Math.sin(angle)*19.4,3,3,"#c8d1d2");
+    }
+    return {image,start:0,width:image.width};
+  }
+
+  truckTrailer(x,start,end,paint,near,distant) {
+    const length=end-start;
+    this.box(x,start,2.10,length,.72,2.27,[paint.shade,paint.deck,paint.trailer]);
+    this.box(x,start+.025,1.93,length-.050,2.20,2.36,[paint.trailer,paint.deck,paint.light]);
+    for (const side of [-1,1]) {
+      const edge=x+side*1.051;
+      const seam=x+side*.91;
+      if (!distant) this.face([[edge,2.268,start],[edge,2.268,end],[x+side*.96,2.36,end],[x+side*.96,2.36,start]],paint.light);
+      this.plane(seam-.033,seam+.033,start+.07,end-.07,2.365,paint.stripe);
+      if (near) this.plane(seam-side*.10-.010,seam-side*.10+.010,start+.11,end-.11,2.365,"#233c4970");
+      if (distant || (this.cameraX-edge)*side<=0) continue;
+      const point=(at,y)=>[edge,y,start+at];
+      const panel=(from,to,bottom,top,color)=>
+        this.face([point(from,bottom),point(to,bottom),point(to,top),point(from,top)],color);
+      panel(0,length,.72,.91,paint.shade);
+      panel(.09,length-.09,.84,.885,"#f4bf79");
+      panel(0,length,2.11,2.26,paint.shade);
+      panel(.08,length-.08,2.23,2.26,paint.light);
+      const diagonal=length*.31;
+      this.face([point(.28,1.14),point(diagonal,1.14),point(diagonal+1.62,2.05),point(1.90,2.05)],paint.shade);
+      this.face([point(diagonal-.20,1.14),point(diagonal+.08,1.14),
+        point(diagonal+1.70,2.05),point(diagonal+1.42,2.05)],paint.stripe);
+      this.face([point(diagonal+.23,1.14),point(diagonal+.31,1.14),
+        point(diagonal+1.93,2.05),point(diagonal+1.85,2.05)],paint.light);
+      if (near) {
+        for (let rib=.58;rib<length-.20;rib+=.77) {
+          panel(rib,rib+.030,.94,2.09,"#13212d45");
+          panel(rib+.030,rib+.067,.94,2.09,"#fff7e534");
+        }
+        for (const marker of [.33,length*.52,length-.46]) {
+          panel(marker,marker+.20,.735,.81,"#ffe198");
+        }
+      }
+    }
+    if (!distant) {
+      for (let at=start+.63;at<end-.24;at+=near?.68:1.36) {
+        this.plane(x-.86,x+.86,at,at+.049,2.367,"#34455037");
+        if (near) this.plane(x-.86,x+.86,at+.049,at+.083,2.368,"#fff4de78");
+      }
+    }
+    if (this.cameraDepth-6>=end) {
+      this.front(x-1.03,x+1.03,.70,2.28,end,paint.shade);
+      for (const side of [-1,1]) {
+        const door=x+side*.52;
+        this.front(door-.44,door+.44,.80,2.19,end+.006,paint.trailer);
+        this.front(door-.044,door+.044,.81,2.18,end+.012,"#adacaf");
+        this.front(door-.20,door+.20,.57,.72,end+.018,"#252633");
+        this.front(door-.16,door+.16,.61,.68,end+.025,"#f56a5a");
+      }
+    }
+  }
+
+  truckCab(x,z,paint,brand,near,distant) {
+    const frontRows=[
+      [.53,.92,.08],[1.31,1.04,0],[2.08,.99,paint.rake],
+      [2.26,.94,paint.rake+.12],[2.36,.84,paint.rake+.27]
+    ];
+    const back=1.69;
+    const at=([y,w,front],side,rear=false)=>
+      [x+side*w,y,z+(rear?back-(y>2.26?.12:0):front)];
+    for (const side of [-1,1]) {
+      if ((this.cameraX-x)*side<.91) continue;
+      for (let i=0;i<frontRows.length-1;i++) {
+        const a=frontRows[i], b=frontRows[i+1];
+        this.face([at(a,side),at(a,side,true),at(b,side,true),at(b,side)],
+          [paint.shade,paint.body,paint.shade,paint.light][i]);
+      }
+      if (distant) continue;
+      const panel=(edge,from,to,low,high,color)=>this.face([
+        [edge,low,z+from],[edge,low,z+to],[edge,high,z+to],[edge,high,z+from]
+      ],color);
+      const edge=x+side*1.025;
+      const glass=x+side*1.008;
+      this.face([[glass,1.49,z+.29],[glass,1.49,z+1.32],[glass,2.01,z+1.32],
+        [glass,2.01,z+.52]],"#142a3b");
+      this.face([[glass,1.77,z+.42],[glass,1.77,z+1.24],[glass,1.96,z+1.24],
+        [glass,1.96,z+.54]],paint.glass);
+      panel(edge,.28,1.35,.735,.99,paint.body);
+      panel(edge,.28,1.35,.974,1.015,paint.light);
+      if (near) {
+        panel(edge,.33,1.35,1.22,1.26,"#dbd0ae");
+        panel(edge,1.32,1.36,.77,1.28,"#202937");
+        panel(edge,1.10,1.27,1.12,1.17,"#202937");
+        panel(edge,.43,.79,.59,.66,"#c1c4c2");
+      }
+    }
+    if (this.eye>=2.36) {
+      const roof=frontRows.at(-1);
+      this.face([at(roof,-1),at(roof,1),at(roof,1,true),at(roof,-1,true)],paint.light);
+      this.plane(x-.55,x+.55,z+paint.rake+.35,z+1.28,2.363,"#fdedc34d");
+    }
+    if (this.depth(2.36,z)<.55 || z<this.cameraDepth-6) return;
+    for (let i=0;i<frontRows.length-1;i++) {
+      const a=frontRows[i],b=frontRows[i+1];
+      this.face([at(a,-1),at(a,1),at(b,1),at(b,-1)],
+        [paint.body,paint.body,paint.shade,paint.light][i]);
+    }
+    this.face([[x-.91,2.20,z+paint.rake+.055],[x+.91,2.20,z+paint.rake+.055],
+      [x+.92,2.24,z+paint.rake+.083],[x-.92,2.24,z+paint.rake+.083]],paint.stripe);
+    this.truckFront(x,z,paint,brand,near,distant);
+  }
+
+  truckFront(x,z,paint,brand,near,distant) {
+    for (let i=0;i<2;i++) {
+      const trim=this.truckTrim[brand][i];
+      const {half,top,bottom}=trim;
+      const depth=y=>z+(i===0?(y-1.31)*paint.rake/.77-.014:-.058);
+      this.sticker([
+        this.project(x-half,top,depth(top)),this.project(x+half,top,depth(top)),
+        this.project(x+half,bottom,depth(bottom)),this.project(x-half,bottom,depth(bottom))
+      ],trim);
+    }
+    if (distant) return;
+    for (const side of [-1,1]) {
+      const mirror=x+side*1.072;
+      this.box(mirror,z+paint.rake+.16,.117,.19,1.58,1.865,["#242d39",paint.light,"#35414c"]);
+      if (near) this.front(mirror-.038,mirror+.038,1.64,1.815,z+paint.rake+.154,paint.shade);
+    }
+  }
+
+  makeTruckTrim(paint,brand) {
+    // The glass and lower fascia sit on separate planes because the windscreen leans back.
+    const scale=144;
+    return [[.95,1.38,2.07,this.paintTruckGlass],[1.025,.39,1.34,this.paintTruckFascia]]
+      .map(([half,bottom,top,draw])=>{
+        const image=document.createElement("canvas");
+        image.width=Math.ceil(half*2*scale);
+        image.height=Math.ceil((top-bottom)*scale);
+        const painter={
+          ctx:image.getContext("2d"), fx:scale, fy:scale, depth:()=>1,
+          project(x,y) { return [(x+half)*image.width/(2*half),(top-y)*image.height/(top-bottom)]; },
+          poly:this.poly, front:this.front, line:this.line, edge:this.edge, ellipse:this.ellipse,
+          face(points,fill) { this.poly(points.map(([x,y])=>this.project(x,y)),fill); }
+        };
+        draw.call(painter,0,0,paint,brand);
+        return {image,start:0,width:image.width,half,bottom,top};
+      });
+  }
+
+  paintTruckGlass(x,z,paint) {
+    const g=this.ctx;
+    const pane=(u,y)=>[x+u,y,z+(y-1.31)*paint.rake/.77-.014];
+    const windscreen=(bottom,top,wide,narrow,fill)=>this.face([
+      pane(-wide,bottom),pane(wide,bottom),pane(narrow,top),pane(-narrow,top)
+    ],fill);
+    windscreen(1.39,2.06,.935,.85,"#151d2a");
+    const glass=g.createLinearGradient(0,this.project(...pane(0,2.04))[1],0,this.project(...pane(0,1.44))[1]);
+    glass.addColorStop(0,paint.glass);
+    glass.addColorStop(.34,"#487889");
+    glass.addColorStop(1,"#203448");
+    windscreen(1.445,2.02,.885,.805,glass);
+    this.face([pane(-.82,1.49),pane(-.58,1.49),pane(.20,2.02),pane(-.12,2.02)],"#e0f5ec63");
+    this.face([pane(.39,1.47),pane(.55,1.47),pane(.79,1.68),pane(.79,1.81)],"#c6e7ed39");
+    for (const side of [-1,1]) {
+      const wiper=pane(side*.14,1.475);
+      this.edge(wiper,pane(side*.78,1.58),"#152332",this.fx*.020);
+    }
+    windscreen(1.46,2.01,.023,.018,"#243444");
+  }
+
+  paintTruckFascia(x,z,paint,brand) {
+    const g=this.ctx;
+    const span=paint.grille;
+    const fascia=(width,bottom,top,offset,color)=>
+      this.front(x-width,x+width,bottom,top,z+offset,color);
+    fascia(.95,1.27,1.333,-.020,paint.light);
+    fascia(.973,.47,.63,-.038,"#282e3b");
+    fascia(.928,.49,.523,-.047,"#a4aab0");
+    fascia(.38,.40,.495,-.052,"#222934");
+    fascia(.19,.422,.484,-.058,"#eee0ba");
+    this.face([[x-span+.045,.64,z-.03],[x+span-.045,.64,z-.03],
+      [x+span,1.25,z-.03],[x-span,1.25,z-.03]],"#a5afb3");
+    fascia(span-.045,.674,1.214,-.041,"#182331");
+    const slats=brand===2?4:5;
+    for (let i=0;i<slats;i++) {
+      const y=.70+i*.076;
+      fascia(span-.10,y,y+(brand===2?.032:.020),-.051,i%2?"#53616b":"#77838a");
+    }
+    if (brand===0) {
+      this.face([[x-span+.105,.69,z-.061],[x-span+.16,.69,z-.061],
+        [x+span-.105,1.035,z-.061],[x+span-.16,1.035,z-.061]],"#c7d1ce");
+    }
+
+    for (const side of [-1,1]) {
+      const lamp=(u,y)=>[x+side*u,y,z-.060];
+      this.face([lamp(.64,.63),lamp(.982,.66),lamp(1.014,.90),lamp(.65,.87)],"#212734");
+      this.face([lamp(.69,.69),lamp(.94,.72),lamp(.97,.849),lamp(.69,.82)],"#e8ebdf");
+      const [px,py]=this.project(...lamp(.795,.765));
+      this.ellipse(px,py,this.fx*.049,this.fy*.056,"#fff7c7");
+      if (brand<2) this.face([lamp(.679,.686),lamp(.946,.712),lamp(.955,.754),
+        lamp(.721,.735),lamp(.719,.817),lamp(.682,.809)],"#fcfff5");
+      else this.face([lamp(.697,.716),lamp(.953,.735),lamp(.96,.775),lamp(.697,.754)],"#fcfff5");
+      this.face([lamp(.85,.61),lamp(.966,.63),lamp(.973,.674),lamp(.858,.655)],"#ffbb57");
+    }
+    const [px,py]=this.project(x,1.114,z-.07);
+    g.font=`900 ${this.fy*.245}px Arial, sans-serif`;
+    g.textAlign="center";
+    g.textBaseline="middle";
+    g.fillStyle="#f5efdb";
+    g.fillText(paint.name,px,py,this.fx*(span*1.76));
   }
 
   ramp(x,z,length,roof=2.36,halfWidth=.94,police=false) {
@@ -1613,15 +2227,19 @@ window.WeddingScene = class WeddingScene {
     for (const side of [-1,1]) {
       const edge=side*halfWidth;
       const base=police?0:.06;
-      this.face([[x+edge,base,bottom],[x+edge,base,top],point(top,edge),point(bottom,edge)],police?"#354271":"#613c45");
+      this.face([[x+edge,base,bottom],[x+edge,base,top],point(top,edge),point(bottom,edge)],police?"#354271":"#4d3e47");
     }
-    this.face([point(bottom,-halfWidth),point(bottom,halfWidth),point(top,halfWidth),point(top,-halfWidth)],police?"#53628e":"#9a726c");
+    this.face([point(bottom,-halfWidth),point(bottom,halfWidth),point(top,halfWidth),point(top,-halfWidth)],police?"#53628e":"#7e6b70");
     for (const side of [-1,1]) {
       const stripe=side*(halfWidth-.06);
       this.edge(point(bottom,stripe,.01),point(top,stripe,.015),"#ffcf94",Math.max(1,this.fy/Math.max(1,z+6)*.033));
     }
     for (let at=bottom+.68;at<top-.26;at+=.90) {
-      this.face([point(at,-.72,.012),point(at+.33,0,.012),point(at,.72,.012),point(at+.17,.72,.012),point(at+.53,0,.012),point(at+.17,-.72,.012)],police?"#ffd78e":"#ffe4ac");
+      if (!police) {
+        this.face([point(at-.14,-.84,.009),point(at-.14,.84,.009),
+          point(at-.083,.84,.009),point(at-.083,-.84,.009)],"#322b3670");
+      }
+      this.face([point(at,-.72,.012),point(at+.33,0,.012),point(at,.72,.012),point(at+.17,.72,.012),point(at+.53,0,.012),point(at+.17,-.72,.012)],police?"#ffd78e":"#ffe8ae");
     }
   }
 
@@ -1834,6 +2452,20 @@ window.WeddingScene = class WeddingScene {
     return {image,scaleX:image.width/note.width,scaleY:image.height/note.height};
   }
 
+  makePickupSprites() {
+    return Object.fromEntries(["bottle","hood","boots","magnet","multiplier2","multiplier5"].map(kind=>{
+      const image=document.createElement("canvas");
+      image.width=96;
+      image.height=112;
+      const painter={ctx:image.getContext("2d"),poly:this.poly,sticker:this.sticker,
+        project(x,y,z) { return [48+64*x/(1+z*.18),56-64*y/(1+z*.18)]; }};
+      const multiplier=kind.startsWith("multiplier");
+      const scale=multiplier?1.30:kind==="magnet"?1.37:.92;
+      WeddingModels.items[kind].render(painter,0,0,0,multiplier?0:.22,scale);
+      return [kind,image];
+    }));
+  }
+
   pickup(entity,z,time) {
     const g=this.ctx;
     const money=["note","air","roof"].includes(entity.kind);
@@ -1874,10 +2506,19 @@ window.WeddingScene = class WeddingScene {
     if (s>6) {
       g.save();
       g.globalAlpha *= Math.min(1,(s-6)/5);
+      const key=multiplier?`multiplier${entity.factor}`:entity.kind;
+      const sprite=w<16?this.pickupSprites[key]:null;
+      if (sprite) {
+        g.drawImage(sprite,px-w*.75,py-s*.875,w*1.5,s*1.75);
+        if (!multiplier) {
+          g.restore();
+          return;
+        }
+      }
       if (multiplier) {
-        const yaw = Math.sin(wave*.43)*.23;
+        const yaw = sprite?0:Math.sin(wave*.43)*.23;
         const scale = 1.30;
-        WeddingModels.items[`multiplier${entity.factor}`].render(this,x,y,z,yaw,scale);
+        if (!sprite) WeddingModels.items[key].render(this,x,y,z,yaw,scale);
         const [labelX,labelY] = this.project(x-Math.sin(yaw)*.27*scale,y,z-Math.cos(yaw)*.27*scale);
         const font = Math.max(9,Math.min(w*.76,s*.52));
         g.font = `900 ${font}px system-ui, sans-serif`;
@@ -1909,6 +2550,14 @@ window.WeddingScene = class WeddingScene {
     }
   }
 
+  gaitMesh(time,rate,cache,build) {
+    const frames=48;
+    const cycle=2*Math.PI/rate;
+    const step=Math.round(time*frames/cycle);
+    const frame=((step%frames)+frames)%frames;
+    return cache[frame] ??= build(frame*cycle/frames);
+  }
+
   character(type,x,y,z,floor,state,time,menu) {
     const scale=this.fy/(z+6-this.cameraDepth);
     const [px,py]=this.project(x,floor+.035,z);
@@ -1937,8 +2586,16 @@ window.WeddingScene = class WeddingScene {
     const throwAge=toss ? state.t-toss.time : Infinity;
     const pose={airborne:!state.grounded&&!menu,shield:state.shield,slide:state.slide,mount:state.mount,
       lean:state.runnerLean,jump:state.jump,landing:state.landing,magnetHeld:state.magnetHeld&&!menu,throwAge};
-    const mesh=runner ? WeddingModels.runner(time,pose) : kuzy ?
-      WeddingModels.runner(state.brideStride,{kuzy:true,lean:state.brideLean}) : WeddingModels.bride((menu?time:state.brideStride)+.16);
+    let mesh;
+    if (runner) {
+      const ordinaryGait=!pose.airborne && !pose.shield && !pose.slide && !pose.mount &&
+        !pose.lean && !pose.jump && !pose.landing && !pose.magnetHeld && !toss;
+      mesh=ordinaryGait ? this.gaitMesh(time,15,this.runnerGait,WeddingModels.runner) : WeddingModels.runner(time,pose);
+    } else if (kuzy) {
+      mesh=WeddingModels.runner(state.brideStride,{kuzy:true,lean:state.brideLean});
+    } else {
+      mesh=this.gaitMesh((menu?time:state.brideStride)+.16,13.4,this.brideGait,WeddingModels.bride);
+    }
     const tilt=runner?.10*state.slide+.095*state.mount*Math.sin(time*5):-.085*state.brideLean;
     mesh.render(this,x,y,z,yaw,modelScale,tilt);
     if (toss && !toss.origin && mesh.magnetGrip) {
@@ -2331,16 +2988,23 @@ window.WeddingScene = class WeddingScene {
   draw(state, elapsed) {
     const g = this.ctx;
     const { w, h } = this;
-    g.setTransform(this.dpr,0,0,this.dpr,0,0);
+    const intervalSinceDraw=elapsed-this.previousFrame;
     const menu = state.mode === "menu";
     const gate=state.visible.find(entity=>entity.kind==="exit");
     const garden=!state.heaven && state.garden && !(gate && gate.z>1);
+    const renderingHall=!garden && !state.heaven;
+    if (this.renderingHall!==renderingHall) {
+      this.renderingHall=renderingHall;
+      this.resizeBuffer();
+    }
+    if (state.mode==="playing") this.adaptToFrameTime(intervalSinceDraw);
+    g.setTransform(this.dpr,0,0,this.dpr,0,0);
     const compactMenu = menu && w<=740;
     const portraitRun = !menu && w<=600 && h>w;
     const closeCamera = portraitRun && !state.heaven;
     const cameraShift = menu && !compactMenu ? .17 : 0;
     const drift = state.shake > 0 ? Math.sin(elapsed*60)*Math.min(4,state.shake*18) : 0;
-    const dt=Math.min(.06,Math.max(.001,elapsed-this.previousFrame));
+    const dt=Math.min(.06,Math.max(.001,intervalSinceDraw));
     this.previousFrame=elapsed;
     const altitude=state.flying?1:Math.min(.68,state.groundY*.26+Math.max(0,state.playerY-state.groundY)*.055);
     const lineupFraming=garden ? Math.max(0,Math.min(1,1-state.yardAhead/55)) : 0;
@@ -2379,17 +3043,20 @@ window.WeddingScene = class WeddingScene {
     const props = [];
     const groundDecor = [];
     const gardenLamps = [];
+    const {sceneryDistance:gardenDistance,hallDistance,hallDetail}=WeddingScene.renderSettings[this.renderQuality];
+    const sceneryDistance=garden?gardenDistance:hallDistance;
+    const sceneryFade=Math.min(108,sceneryDistance-45);
     const gallery = garden ? [] : state.paintings.filter(painting =>
       painting.position-distance > WeddingScene.wallNear && painting.position-distance < 104);
     const guests = state.guests.filter(guest => guest.garden === garden && guest.position-distance > -5 &&
       guest.position-distance < WeddingScene.viewDistance);
     const interval = garden ? 8 : 9;
     const first=Math.floor((distance+(garden?-8.25:WeddingScene.wallNear-4.5))/interval);
-    const last=Math.ceil((distance+WeddingScene.viewDistance)/interval);
+    const last=Math.ceil((distance+sceneryDistance)/interval);
     const addDecor=(z,kind,seed,x=0,low=false) => {
       const wall = kind==="painting" || kind==="wallOrnament";
       const near=wall?WeddingScene.wallNear:garden?-6.4:-4.8;
-      if (z<=near || z>=WeddingScene.viewDistance) return;
+      if (z<=near || z>=sceneryDistance) return;
       if (garden && z+3.2>crossingStart) return;
       if (gate && (garden?z<gate.z+1.3:z>gate.z-.65)) return;
       const roadside = kind!=="arch" && kind!=="chandelier";
@@ -2433,9 +3100,16 @@ window.WeddingScene = class WeddingScene {
         }
         const celebration = index%3===0;
         const cakeSide = Math.floor(index/3)%2 ? -1 : 1;
+        const canopy = (index-2)/3;
+        if (Number.isInteger(canopy) && z<120) addDecor(z+6.5,"hallCanopy",((canopy%3)+3)%3);
         for (const side of [-1,1]) {
+          if (ornamentZ<92) {
+            addDecor(ornamentZ,"hallBay",((index+Number(side===1))%3+3)%3,side*7.06);
+            addDecor(ornamentZ+1.15,"hallPool",index,side*5.72,true);
+          }
           if (z<116 && !guests.some(guest => guest.side===side && Math.abs(guest.position-distance-z-3.4)<2.2)) {
             if (celebration && side===cakeSide) addDecor(z+3.4,"cakeTable",index,side*5.92);
+            else if (side===ornamentSide && z<86) addDecor(z+3.4,"hallPlanter",((index%3)+3)%3,side*6.15);
             else addDecor(z+3.4,"table",index,side*5.38);
           }
         }
@@ -2446,13 +3120,16 @@ window.WeddingScene = class WeddingScene {
     if (lampLight>0) {
       for (const {x,z} of gardenLamps) this.gardenLampPool(x,z,lampLight);
     }
-    // Roadside flowers and lawn borders sit on the ground behind the solid vehicles.
+    // Ground lighting and low scenery are painted below the solid props.
     for (const prop of groundDecor.reverse()) {
-      g.globalAlpha = this.nearVisibility(prop.z)*this.distanceVisibility(prop.z,76,155);
+      const opacity=this.nearVisibility(prop.z)*this.distanceVisibility(prop.z,Math.min(76,sceneryFade),Math.min(155,sceneryDistance));
+      if (opacity<=0) continue;
+      g.globalAlpha=opacity;
       if (prop.decor==="flowers") {
         const venue = state.guests.find(guest => guest.garden && Math.abs(guest.position-distance-prop.z)<3);
         this.gardenDecor(prop.z,prop.seed,venue?.side);
-      } else this.lawnBorders(prop.z,prop.seed);
+      } else if (prop.decor==="hallPool") this.hallFloorLight(prop.x,prop.z);
+      else this.lawnBorders(prop.z,prop.seed);
     }
     g.globalAlpha = 1;
     for (const painting of gallery) {
@@ -2482,11 +3159,11 @@ window.WeddingScene = class WeddingScene {
     let brideSpeech = null;
     for (const prop of props) {
       const {z} = prop;
-      const visibility = this.distanceVisibility(z);
+      const visibility = prop.decor ? this.distanceVisibility(z,sceneryFade,sceneryDistance) : this.distanceVisibility(z);
       if (visibility <= 0) continue;
       g.globalAlpha = visibility;
       if (prop.decor) {
-        if (prop.decor==="chandelier") this.chandelier(z);
+        if (prop.decor==="chandelier") this.chandelier(z,anim);
         else if (prop.decor==="painting") this.hallPainting(z,prop.x,prop.seed);
         else if (prop.decor==="wallOrnament") this.wallArtwork(this.wallOrnaments[Number(prop.x<0)],
           z,prop.x,5.23,2.82,8.0);
@@ -2494,15 +3171,31 @@ window.WeddingScene = class WeddingScene {
           g.save();
           const fade=prop.decor==="arch" || prop.decor==="archSupports" ? 1 : this.nearVisibility(z);
           g.globalAlpha*=fade;
-          if (prop.decor==="hall") this.hallSection(z,prop.seed,prop.x);
+          if (prop.decor==="hall") this.hallSection(z,prop.seed,prop.x,hallDetail);
+          if (prop.decor==="hallCanopy") {
+            g.globalAlpha*=this.distanceVisibility(z,73,126)*Math.max(0,Math.min(1,(z-4)/6));
+            if (g.globalAlpha>0) this.hallCanopy(z,prop.seed,anim,hallDetail);
+          }
+          if (prop.decor==="hallBay") {
+            g.globalAlpha*=this.distanceVisibility(z,57,92);
+            const covered=gallery.some(painting=>painting.side===Math.sign(prop.x) &&
+              Math.abs(painting.position-distance-z)<7.5);
+            if (g.globalAlpha>0) this.hallBay(prop.x,z,prop.seed,covered,anim,hallDetail);
+          }
+          if (prop.decor==="hallPlanter") {
+            g.globalAlpha*=this.distanceVisibility(z,59,86);
+            if (g.globalAlpha>0) this.hallPlanter(prop.x,z,prop.seed);
+          }
           if (prop.decor==="table" || prop.decor==="cakeTable") {
             g.globalAlpha *= this.distanceVisibility(z,73,116);
-            if (prop.decor==="table") this.hallTable(z,prop.seed,[prop.x]);
-            else this.gardenReception(prop.x,z,prop.seed,false);
+            if (g.globalAlpha>0) {
+              if (prop.decor==="table") this.hallTable(z,prop.seed,[prop.x]);
+              else this.gardenReception(prop.x,z,prop.seed,false);
+            }
           }
           if (prop.decor==="hallCelebration") {
             g.globalAlpha *= this.distanceVisibility(z,64,100);
-            this.hallCelebration(prop.x,z,prop.seed);
+            if (g.globalAlpha>0) this.hallCelebration(prop.x,z,prop.seed);
           }
           if (prop.decor==="lamp") this.gardenLamp(prop.x,z);
           if (prop.decor==="tree") this.gardenTree(prop.x,z,prop.seed);

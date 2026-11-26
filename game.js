@@ -189,6 +189,9 @@
   let portal = null;
   let returnFade = null;
   let previousFrame = 0;
+  let routeFrame = null;
+  let audioWaiting = false;
+  let stillFrame = null;
   // A complete local media URL keeps seeking available on static hosts without byte ranges.
   const weddingFile = location.protocol === "file:" ? Promise.resolve(null) :
     fetch(audio.src).then(response => {
@@ -399,6 +402,8 @@
       garageAudio.currentTime = 0;
     }
     const enteringPause = next === "paused" && mode !== "paused";
+    if (next !== mode) routeFrame = null;
+    stillFrame = null;
     mode = next;
     syncTelegramSwipes();
     const atParking = next === "parking" || next === "garage";
@@ -828,8 +833,6 @@
 
   function pause() {
     if (mode !== "playing") return;
-    if (!portal) advance(audio.currentTime);
-    if (mode !== "playing") return;
     pauseMusic();
     setMode("paused");
     ui["heaven-fine"].hidden = true;
@@ -892,6 +895,7 @@
   }
 
   function enterHeaven() {
+    routeFrame = null;
     const route = {t,distance,lane,x,brideX,brideTarget,brideDistance,brideYield,runnerShift,brideShift,
       laneChangeDistance,sideRebound,lastSideHit,playerY,brideAway,chaseGap,velocityY,groundY,
       grounded,gravity,jumpStart,landedAt,poweredJump,slideUntil,flightUntil,flightSource,bootsUntil,magnetUntil,
@@ -941,6 +945,7 @@
     const visit = portal;
     const ticket = processTicket;
     portal = null;
+    routeFrame = null;
     ui["heaven-fine"].hidden = true;
     if (!visit.caught) notify(`Рай · +${money(heavenReward(visit))}`,2.8);
     returnFade = {elapsed:0,heaven:!visit.caught};
@@ -1375,6 +1380,22 @@
     }
   }
 
+  function advanceRoute(now) {
+    if (audioWaiting || audio.paused || audio.seeking || audio.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+      routeFrame = null;
+      return;
+    }
+    const mediaTime = audio.currentTime;
+    const elapsed = routeFrame === null ? 0 : Math.min(.12,Math.max(0,(now-routeFrame)/1000));
+    routeFrame = now;
+    const expected = t+elapsed*audio.playbackRate;
+    const drift = mediaTime-expected;
+    // Media clocks can repeat a sample across several display frames. Correct drift gradually.
+    const outsideDeadband = Math.sign(drift)*Math.max(0,Math.abs(drift)-.055);
+    const correction = Math.min(.34,Math.max(-.18,outsideDeadband*2));
+    advance(Math.min(expected+elapsed*correction,mediaTime+.115,audio.duration || trackDuration));
+  }
+
   function action(direction) {
     if (mode !== "playing" || (portal && portal.phase!=="run")) return;
     if (direction === "left" || direction === "right") {
@@ -1537,7 +1558,7 @@
     form.addEventListener("submit",event => {
       event.preventDefault();
       if (adminUnlocked) return;
-      const correct = field.value.trim().toLowerCase() === "nedomajorik";
+      const correct = field.value.trim() === "60225";
       form.reset();
       if (!correct) {
         field.setAttribute("aria-invalid","true");
@@ -1697,6 +1718,14 @@
     advance(audio.duration);
     if (mode === "playing" && !portal && garden) finish(true);
   });
+  audio.addEventListener("waiting",() => {
+    audioWaiting = true;
+    routeFrame = null;
+  });
+  audio.addEventListener("playing",() => {
+    audioWaiting = false;
+    routeFrame = null;
+  });
   audio.addEventListener("error",() => {
     if (mode === "playing") {
       pauseMusic();
@@ -1819,9 +1848,22 @@
             returnFade = null;
           }
         }
-        advance(audio.currentTime);
+        advanceRoute(now);
       }
       if (t-lastHudUpdate >= .05) updateHud();
+    }
+    if (mode === "paused" || mode === "lost" || mode === "error") {
+      const {width,height}=scene.canvas;
+      if (stillFrame?.mode===mode && stillFrame.t===t && stillFrame.width===width && stillFrame.height===height) {
+        if (now-stillFrame.since>400) {
+          requestAnimationFrame(frame);
+          return;
+        }
+      } else {
+        stillFrame={mode,t,width,height,since:now};
+      }
+    } else {
+      stillFrame=null;
     }
     if (magnetTrails.length) magnetTrails = magnetTrails.filter(pull=>t-pull.time<.24);
     if (magnetThrow && t-magnetThrow.time>=1.24) magnetThrow = null;
