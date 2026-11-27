@@ -97,7 +97,8 @@
     "runner-pause","runner-guide","runner-controls","pause-resume","pause-restart","pause-menu",
     "result-money","result-distance","result-best","hud","money","distance","boosts-live","clock","progress",
     "chapter-label","route-hall","route-garden","pause","toast","sound","runner-sound","help",
-    "guest-speech","bride-speech","route-heaven","route-main","cloud-veil","heaven-fine",
+    "guest-speech","bride-speech","route-heaven","route-main","heaven-count","heaven-conversion","heaven-reward",
+    "cloud-veil","heaven-fine",
     "fine-count","fine-debit","fine-capital",
     "parking-intro","parking-heading","parking-continue",
     "garage","garage-heading","garage-image","garage-name","garage-price","garage-capital","garage-options",
@@ -107,18 +108,22 @@
   const iconSources = Object.fromEntries(Object.entries(WeddingModels.icons).map(([name,icon])=>[name,icon.toDataURL()]));
   ui["cloud-veil"].style.setProperty("--cloud-shape",`url(${scene.heavenCloud.toDataURL()})`);
   document.querySelectorAll("[data-boost-icon]").forEach(image => { image.src = iconSources[image.dataset.boostIcon]; });
-  const chips = Object.fromEntries(Object.entries(boosts).map(([name,{label}]) => {
+  const chips = Object.fromEntries(Object.entries({...boosts,multiplier:{label:multiplierLabel}}).map(([name,{label}]) => {
     const chip = document.createElement("div");
     chip.className = "power-chip";
     chip.title = label;
     chip.hidden = true;
-    const icon = document.createElement("img");
-    icon.src = iconSources[name] ?? "assets/" + name + ".webp";
-    icon.alt = label;
+    const icon = document.createElement(name==="multiplier" ? "b" : "img");
+    if (name==="multiplier") icon.className = "multiplier-mark";
+    else {
+      icon.src = iconSources[name] ?? "assets/" + name + ".webp";
+      icon.alt = label;
+    }
     const value = document.createElement("span");
+    value.hidden = name==="multiplier";
     chip.append(icon,value);
     ui["boosts-live"].append(chip);
-    return [name,{chip,value}];
+    return [name,{chip,icon,value}];
   }));
   const compactRunnerHud = matchMedia("(max-width: 600px) and (orientation: portrait)");
 
@@ -561,6 +566,7 @@
     ui["route-main"].hidden = heaven;
     ui["route-heaven"].hidden = !heaven;
     stage.classList.toggle("heaven",heaven);
+    stage.classList.toggle("top-runner-hud",heaven || compactRunnerHud.matches);
     stage.classList.toggle("sunlit",garden);
     for (const [key, current] of [["hall",!garden],["garden",garden]]) {
       const element = ui["route-"+key];
@@ -1465,19 +1471,28 @@
 
   function updateHud() {
     lastHudUpdate = t;
-    if (inHeaven()) return;
-    const active = {bottle:Math.ceil(flightUntil-t),hood:shield?1:0,boots:Math.ceil(bootsUntil-t),
-      magnet:Math.ceil(magnetUntil-t)};
+    const heaven = inHeaven();
+    const secondsLeft = until => Math.ceil(Math.min(until,heaven?heavenDuration:Infinity)-t);
+    const active = {bottle:secondsLeft(flightUntil),hood:shield?1:0,boots:secondsLeft(bootsUntil),
+      magnet:secondsLeft(magnetUntil),multiplier:heaven?portal.factor-1:0};
     const compact = compactRunnerHud.matches;
     let hasBoosts = false;
-    for (const [kind,{chip,value}] of Object.entries(chips)) {
-      const hidden = active[kind]<=0 || (compact && kind==="hood");
+    for (const [kind,{chip,icon,value}] of Object.entries(chips)) {
+      const hidden = active[kind]<=0 || (!heaven && compact && kind==="hood");
       if (chip.hidden !== hidden) chip.hidden = hidden;
       if (chip.hidden) continue;
       hasBoosts = true;
-      setText(value,kind==="hood"?"1 удар":active[kind]+" с");
+      if (kind==="multiplier") setText(icon,`×${portal.factor}`);
+      else setText(value,kind==="hood"?(heaven && compact?"1":"1 удар"):active[kind]+" с");
     }
     if (ui["boosts-live"].hidden === hasBoosts) ui["boosts-live"].hidden = !hasBoosts;
+    if (heaven) {
+      const reward = heavenReward(portal);
+      setText(ui["heaven-count"],`Сосиски · ${number.format(portal.sausages)}`);
+      setText(ui["heaven-conversion"],`${number.format(reward/sausageValue)} × ${money(sausageValue)}`);
+      setText(ui["heaven-reward"],money(reward));
+      return;
+    }
     setText(ui.money,formatCapital(portal?.caught ? fineCapital(portal) : capitalKopecks));
     if (compact) return;
     setText(ui.distance,number.format(Math.floor(distance-speedCurve(startTime))) + " м");
@@ -1908,6 +1923,7 @@
   }
 
   compactRunnerHud.addEventListener("change",() => {
+    updateRoute();
     if (mode === "playing" || mode === "paused") updateHud();
   });
   byId("telegram-web-app")?.addEventListener("load",syncTelegramSwipes,{once:true});

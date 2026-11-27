@@ -90,7 +90,10 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
 .timer time { color: #ffceb0; white-space: nowrap; font-variant-numeric: tabular-nums }
 .progress { height: 4px; border-radius: 10px; background: #7c6951; overflow: hidden }
 .progress i { display: block; width: 100%; height: 100%; transform: scaleX(0); transform-origin: left center; background: linear-gradient(90deg, #dd945f, #ffe3a6); border-radius: 10px }
-.heaven :is(.readout,.boosts-live,.timer) { display: none }
+.heaven-reward,
+.heaven :is(.readout .counter:not(.heaven-reward), .timer) { display: none }
+.heaven .heaven-reward { display: grid; line-height: 1; white-space: nowrap }
+.heaven-reward small { color: #f2dfbf; font-size: 10px; font-variant-numeric: tabular-nums }
 .heaven .toast { top: auto; bottom: calc(72px + env(safe-area-inset-bottom)); border-color: #f5ceae; background: #38294ce8 }
 .cloud-veil { position: absolute; z-index: 2; inset: -20% -44%; pointer-events: none; will-change: opacity, transform; background: radial-gradient(ellipse at 17% 44%,#f8e6ff 0 16%,transparent 17%), radial-gradient(ellipse at 39% 60%,#fff7ef 0 19%,transparent 21%), radial-gradient(ellipse at 68% 27%,#ffeadf 0 20%,transparent 22%), radial-gradient(ellipse at 88% 73%,#eedafa 0 20%,transparent 22%), linear-gradient(165deg,#e9dcfa,#fff2e3 68%,#d9caee) }
 .cloud-veil i { position: absolute; width: 62%; height: 52%; background: var(--cloud-shape) center / 100% 100% no-repeat }
@@ -167,63 +170,68 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
   .timer { width: min(202px, 60%) }
   .card { max-width: 100% }
 }
-@media (max-width: 600px) and (orientation: portrait) {
-  .shell {
-    --runner-panel-height: calc(62px + env(safe-area-inset-top));
-    --runner-left: max(8px, calc(4px + env(safe-area-inset-left)));
-    --runner-right: max(8px, calc(4px + env(safe-area-inset-right)));
-    --runner-button: 44px;
-  }
-  .stage:not(.heaven):has(> :is(.hud, #runner-pause, #overlay.finished):not([hidden])) .runner-view {
-    top: var(--runner-panel-height);
-  }
-  .shell:has(.stage:not(.heaven) > .hud:not([hidden])) .masthead,
-  .stage:not(.heaven) .hud :is(.counter.compact, .timer) { display: none }
-  .stage:not(.heaven) .hud {
-    inset: 0 0 auto;
-    height: var(--runner-panel-height);
-    display: grid;
-    grid-template-columns: minmax(0, auto) minmax(max-content, 1fr) repeat(2, var(--runner-button));
-    align-items: center;
-    gap: 6px;
-    padding: env(safe-area-inset-top) var(--runner-right) 0 var(--runner-left);
-    border-bottom: 1px solid #bc8f646b;
-    background: linear-gradient(180deg, #3c2b24, #251c1a);
-  }
-  .stage:not(.heaven) .readout { min-width: 0; max-width: min(33vw, 160px) }
-  .stage:not(.heaven) .hud .counter { min-width: 0; gap: 2px; padding: 6px; min-height: var(--runner-button) }
-  .stage:not(.heaven) .hud .counter span { font-size: 10px }
-  .stage:not(.heaven) .hud .counter strong {
-    font-size: clamp(13px, 4vw, 16px);
-    line-height: 1.05;
-    overflow-wrap: anywhere;
-  }
-  .stage:not(.heaven) .hud .pause { grid-column: 3; margin: 0 }
-  .stage:not(.heaven) .hud .runner-sound { grid-column: 4; display: grid; pointer-events: auto }
-  .stage:not(.heaven) .hud :is(.pause, .runner-sound) { width: var(--runner-button); height: var(--runner-button) }
-  .stage:not(.heaven) .boosts-live {
-    grid-column: 2;
-    position: static;
-    max-width: none;
-    flex-wrap: nowrap;
-    justify-content: start;
-    gap: 3px;
-  }
-  .stage:not(.heaven) .boosts-live .power-chip {
-    display: grid;
-    justify-items: center;
-    gap: 1px;
-    min-width: 27px;
-    padding: 2px 1px;
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  .stage:not(.heaven) .boosts-live .power-chip img { width: 18px; height: 18px }
-  .stage:not(.heaven):has(> .hud:not([hidden])) .toast { top: 10px }
+.top-runner-hud {
+  --runner-panel-height: calc(62px + env(safe-area-inset-top));
+  --runner-left: max(8px, calc(4px + env(safe-area-inset-left)));
+  --runner-right: max(8px, calc(4px + env(safe-area-inset-right)));
+  --runner-button: 44px;
 }
+.top-runner-hud:has(> :is(.hud, #runner-pause, #overlay.finished):not([hidden])) .runner-view {
+  top: var(--runner-panel-height);
+}
+.shell:has(.top-runner-hud > .hud:not([hidden])) .masthead,
+.top-runner-hud .hud :is(.counter.compact, .timer) { display: none }
+.top-runner-hud .hud {
+  inset: 0 0 auto;
+  height: var(--runner-panel-height);
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(max-content, 1fr) repeat(2, var(--runner-button));
+  align-items: center;
+  gap: 6px;
+  padding: env(safe-area-inset-top) var(--runner-right) 0 var(--runner-left);
+  border-bottom: 1px solid #bc8f646b;
+  background: linear-gradient(180deg, #3c2b24, #251c1a);
+}
+.heaven .hud {
+  grid-template-columns: max-content minmax(max-content, 1fr) repeat(2, var(--runner-button));
+  column-gap: 4px;
+}
+.top-runner-hud .readout { grid-column: 1; min-width: 0; max-width: min(33vw, 160px) }
+.top-runner-hud .hud .counter { min-width: 0; gap: 2px; padding: 6px; min-height: var(--runner-button) }
+.top-runner-hud .hud .counter span { font-size: 10px }
+.heaven .hud .heaven-reward span { letter-spacing: .035em }
+.top-runner-hud .hud .counter strong {
+  font-size: clamp(13px, 4vw, 16px);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+.top-runner-hud .hud .pause { grid-column: 3; margin: 0 }
+.top-runner-hud .hud .runner-sound { grid-column: 4; display: grid; pointer-events: auto }
+.top-runner-hud .hud :is(.pause, .runner-sound) { width: var(--runner-button); height: var(--runner-button) }
+.top-runner-hud .boosts-live {
+  grid-column: 2;
+  position: static;
+  max-width: none;
+  flex-wrap: nowrap;
+  justify-content: start;
+  gap: 3px;
+}
+.top-runner-hud .boosts-live .power-chip {
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  min-width: 27px;
+  padding: 2px 1px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.top-runner-hud .boosts-live .power-chip img { width: 18px; height: 18px }
+.heaven .boosts-live .power-chip { font-size: 10px }
+.heaven .boosts-live .multiplier-mark { align-self: center; width: 19px; height: 19px; font-size: 10px }
+.top-runner-hud:not(.heaven):has(> .hud:not([hidden])) .toast { top: 10px }
 @media (max-width: 360px) and (orientation: portrait) {
-  .stage:not(.heaven) .hud:has(.boosts-live:not([hidden])) .counter strong { font-size: 11px }
+  .top-runner-hud:not(.heaven) .hud:has(.boosts-live:not([hidden])) .counter strong { font-size: 11px }
 }
 @media (orientation: landscape) and (max-height: 480px) {
   :root { --hud-top: 54px }

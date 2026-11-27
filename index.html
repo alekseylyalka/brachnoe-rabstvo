@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#2b1218">
   <meta name="description" content="Браузерный раннер. Пробегите из свадебного зала в сад под свадебный трек.">
   <title>БРАЧНОЕ РАБСТВО</title>
-  <link rel="stylesheet" href="style.css?v=garden-chase">
+  <link rel="stylesheet" href="style.css?v=heaven-hud">
   <script id="telegram-web-app" src="https://telegram.org/js/telegram-web-app.js?65" async></script>
   <script src="models.js?v=wedding-limo" defer></script>
   <script src="scene.js?v=garden-chase" defer></script>
@@ -17,7 +17,7 @@
   <script src="campus-dorm.js?v=room-332" defer></script>
   <script src="campus-interior.js?v=room-332" defer></script>
   <script src="campus-quiz.js?v=run-rules" defer></script>
-  <script src="game.js?v=garden-chase" defer></script>
+  <script src="game.js?v=heaven-hud" defer></script>
 </head>
 <body>
   <main class="shell">
@@ -42,7 +42,15 @@
         <p id="bride-speech" class="guest-speech" role="status" aria-atomic="true" hidden></p>
       </div>
       <div id="hud" class="hud" hidden>
-        <div class="readout"><div class="counter"><span>КАПИТАЛ</span><strong id="money">0 ₽</strong></div><div class="counter compact"><span>ПРОЙДЕНО</span><strong id="distance">0 м</strong></div></div>
+        <div class="readout">
+          <div class="counter"><span>КАПИТАЛ</span><strong id="money">0 ₽</strong></div>
+          <div class="counter compact"><span>ПРОЙДЕНО</span><strong id="distance">0 м</strong></div>
+          <div class="counter heaven-reward">
+            <span id="heaven-count">Сосиски · 0</span>
+            <small id="heaven-conversion">0 × 2 500 ₽</small>
+            <strong id="heaven-reward">0 ₽</strong>
+          </div>
+        </div>
         <div id="boosts-live" class="boosts-live" role="group" aria-label="Активные бусты" hidden></div>
         <button id="pause" class="icon-btn pause" type="button" aria-label="Пауза" title="Пауза (Esc)">Ⅱ</button>
         <button id="runner-sound" class="icon-btn runner-sound" type="button" aria-label="Выключить звук" title="Выключить звук" aria-pressed="false"><span class="sound-icon" aria-hidden="true">♪</span></button>
