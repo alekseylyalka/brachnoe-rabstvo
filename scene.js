@@ -2,6 +2,7 @@
 
 window.WeddingScene = class WeddingScene {
   static viewDistance = 196;
+  static portraitViewport = matchMedia("(max-width: 600px) and (orientation: portrait)");
   static renderSettings = [
     {pixelRatio:2, sceneryDistance:196, hallPixelRatio:2, hallDistance:166, hallDetail:1},
     {pixelRatio:1.40, sceneryDistance:154, hallPixelRatio:1.25, hallDistance:124, hallDetail:.82},
@@ -103,10 +104,10 @@ window.WeddingScene = class WeddingScene {
     const { width, height } = this.canvas.getBoundingClientRect();
     this.w = Math.max(1, width);
     this.h = Math.max(1, height);
-    this.portrait = this.w<=600 && this.h>this.w;
+    this.portrait = WeddingScene.portraitViewport.matches;
     const bottomInset = this.portrait ? getComputedStyle(this.canvas).getPropertyValue("--runner-bottom-inset") : "";
     this.safeBottom = parseFloat(bottomInset) || 0;
-    const mobileResolution = this.h>this.w && (this.portrait || matchMedia("(any-pointer: coarse)").matches);
+    const mobileResolution = this.portrait || (this.h>this.w && matchMedia("(any-pointer: coarse)").matches);
     if (this.mobileResolution!==mobileResolution) {
       this.mobileResolution = mobileResolution;
       this.qualityLevels = mobileResolution ? WeddingScene.portraitRenderSettings : WeddingScene.renderSettings;
@@ -3046,7 +3047,7 @@ window.WeddingScene = class WeddingScene {
     const altitude=state.flying?1:Math.min(.68,state.groundY*.26+Math.max(0,state.playerY-state.groundY)*.055);
     const lineupFraming=garden ? Math.max(0,Math.min(1,1-state.yardAhead/55)) : 0;
     // Limit the portrait camera’s sideways travel so the opposite lane stays in view.
-    const cameraFollow=(closeCamera?.09:portraitRun?.22:.46)*(1-lineupFraming)+.12*lineupFraming;
+    const cameraFollow=(closeCamera?.075:portraitRun?.22:.46)*(1-lineupFraming)+.12*lineupFraming;
     this.cameraRise+=((menu?0:altitude)-this.cameraRise)*(1-Math.exp(-5.5*dt));
     this.cameraX+=((menu?0:state.x*cameraFollow)-this.cameraX)*(1-Math.exp(-11*dt));
     this.cameraDepth=menu?0:closeCamera?2.90:.56;
@@ -3055,7 +3056,7 @@ window.WeddingScene = class WeddingScene {
     this.eye=(closeCamera?3.72:5.65)+this.cameraRise*2.70+lift*2.85;
     this.fy=h*(1.10-this.cameraRise*.23-lift*.105);
     // The closer camera widens the foreground, so keep the outer rails inside the portrait frame.
-    const trackWidth=closeCamera?1.42:portraitRun?1.55:1.25;
+    const trackWidth=closeCamera?1.44:portraitRun?1.55:1.25;
     this.fx=Math.min(this.fy,w*(trackWidth*(1-lineupFraming)+.99*lineupFraming));
     const runnerHorizon=portraitRun?Math.max(h*.25,Math.min(156,h*.306)):h*.306;
     this.horizon=(menu?h*(compactMenu?.25:.284):runnerHorizon)-h*(this.cameraRise*.046+lift*.065+(closeCamera?.025:0));

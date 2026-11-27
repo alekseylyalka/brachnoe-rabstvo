@@ -94,7 +94,7 @@
     "story","warning","warning-continue","ost","ost-tracks","ost-sound","settings","settings-guide","settings-sound",
     "runner-pause","runner-guide","runner-controls","pause-resume","pause-restart","pause-menu",
     "result-money","result-distance","result-best","hud","money","distance","boosts-live","clock","progress",
-    "chapter-label","route-hall","route-garden","pause","toast","sound","help",
+    "chapter-label","route-hall","route-garden","pause","toast","sound","runner-sound","help",
     "guest-speech","bride-speech","route-heaven","route-main","heaven-hud","heaven-clock","heaven-progress",
     "heaven-money","heaven-boosts","cloud-veil","heaven-fine","fine-count","fine-debit","fine-capital",
     "parking-intro","parking-heading","parking-continue",
@@ -582,7 +582,7 @@
     drive.setMuted(muted);
     applyMusicMix();
     const label = muted ? "Включить звук" : "Выключить звук";
-    for (const button of [ui.sound,campusSound,ui["garage-sound"],ui["settings-sound"],ui["ost-sound"]]) {
+    for (const button of [ui.sound,ui["runner-sound"],campusSound,ui["garage-sound"],ui["settings-sound"],ui["ost-sound"]]) {
       button.setAttribute("aria-pressed",String(muted));
       button.setAttribute("aria-label",label);
       button.title = label;
@@ -1710,7 +1710,7 @@
       setText(ui["garage-status"],"Трек не запустился. Попробуй продолжить ещё раз.");
     }
   });
-  for (const button of [ui.sound,ui["ost-sound"],ui["settings-sound"]]) {
+  for (const button of [ui.sound,ui["runner-sound"],ui["ost-sound"],ui["settings-sound"]]) {
     button.addEventListener("click",toggleSound);
   }
   ui["garage-sound"].addEventListener("click",() => {

@@ -44,6 +44,7 @@ button, a { -webkit-tap-highlight-color: transparent }
 .sound-icon { position: relative; font-size: 25px; font-weight: 500; margin-top: -1px }
 .icon-btn[aria-pressed=true] .sound-icon::after { content: ""; position: absolute; width: 21px; height: 2px; background: #f9ebde; transform: rotate(-44deg); top: 13px; left: -5px }
 .stage { position: absolute; inset: 0; isolation: isolate; overflow: hidden; background: #655746; touch-action: none }
+.runner-view { position: absolute; inset: 0 }
 canvas, .overlay, .vignette { position: absolute; inset: 0; width: 100%; height: 100% }
 .vignette { pointer-events: none; background: linear-gradient(0deg, #2d191c5a, transparent 17%), linear-gradient(180deg, #3d25234f, transparent 20%); z-index: 1 }
 .sunlit .vignette { background: linear-gradient(0deg, #204a2844, transparent 16%), linear-gradient(180deg, #124a6060, transparent 19%) }
@@ -80,6 +81,7 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
 .counter strong { font-variant-numeric: tabular-nums; font-size: 18px; color: #ffe1a9 }
 .counter.compact strong { color: #fff5e4 }
 .pause { pointer-events: auto; margin-left: auto; flex: none }
+.runner-sound { display: none }
 .boosts-live { display: flex; flex-wrap: wrap; gap: 5px }
 .power-chip { display: flex; align-items: center; gap: 5px; padding: 3px 7px; min-height: 33px; color: #ffe0b8; font-size: 12px; font-weight: 800 }
 .power-chip img { width: 22px; height: 23px; object-fit: contain }
@@ -178,46 +180,62 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
 }
 @media (max-width: 600px) and (orientation: portrait) {
   .shell {
-    --runner-top: calc(8px + env(safe-area-inset-top));
-    --runner-left: max(var(--edge-gap), calc(8px + env(safe-area-inset-left)));
-    --runner-right: max(var(--edge-gap), calc(8px + env(safe-area-inset-right)));
+    --runner-panel-height: calc(62px + env(safe-area-inset-top));
+    --runner-left: max(8px, calc(4px + env(safe-area-inset-left)));
+    --runner-right: max(8px, calc(4px + env(safe-area-inset-right)));
     --runner-bottom-inset: env(safe-area-inset-bottom);
     --runner-button: 44px;
-    --runner-gap: 6px;
   }
-  .shell:has(.stage:not(.heaven) > .hud:not([hidden])) .masthead {
-    top: var(--runner-top);
-    right: var(--runner-right);
-    display: flex;
-    justify-content: end;
+  .stage:not(.heaven):has(> :is(.hud, #runner-pause, #overlay.finished):not([hidden])) .runner-view {
+    top: var(--runner-panel-height);
   }
-  .shell:has(.stage:not(.heaven) > .hud:not([hidden])) .masthead :is(.identity,.route,#help),
-  .stage:not(.heaven) .hud :is(.counter.compact,.timer) { display: none }
-  .shell:has(.stage:not(.heaven) > .hud:not([hidden])) #sound,
-  .stage:not(.heaven) .hud .pause { width: var(--runner-button); height: var(--runner-button) }
+  .shell:has(.stage:not(.heaven) > .hud:not([hidden])) .masthead,
+  .stage:not(.heaven) .hud :is(.counter.compact, .timer) { display: none }
   .stage:not(.heaven) .hud {
-    flex-direction: column;
-    gap: 5px;
-    padding: var(--runner-top) var(--runner-right) 0 var(--runner-left);
+    inset: 0 0 auto;
+    height: var(--runner-panel-height);
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(max-content, 1fr) repeat(2, var(--runner-button));
+    align-items: center;
+    gap: 6px;
+    padding: env(safe-area-inset-top) var(--runner-right) 0 var(--runner-left);
+    border-bottom: 1px solid #bc8f646b;
+    background: linear-gradient(180deg, #3c2b24, #251c1a);
   }
-  .stage:not(.heaven) .hud .readout { max-width: calc(100% - 2 * (var(--runner-button) + var(--runner-gap))) }
-  .stage:not(.heaven) .hud .pause {
-    position: absolute;
-    top: var(--runner-top);
-    right: calc(var(--runner-right) + var(--runner-button) + var(--runner-gap));
-  }
-  .stage:not(.heaven) .hud .counter { gap: 2px; padding: 6px 9px; min-height: var(--runner-button) }
+  .stage:not(.heaven) .readout { min-width: 0; max-width: min(33vw, 160px) }
+  .stage:not(.heaven) .hud .counter { min-width: 0; gap: 2px; padding: 6px; min-height: var(--runner-button) }
   .stage:not(.heaven) .hud .counter span { font-size: 10px }
-  .stage:not(.heaven) .hud .counter strong { font-size: 16px; line-height: 1.05 }
-  .stage:not(.heaven) .boosts-live {
-    position: static;
-    max-width: 100%;
-    justify-content: start;
-    gap: 4px;
+  .stage:not(.heaven) .hud .counter strong {
+    font-size: clamp(13px, 4vw, 16px);
+    line-height: 1.05;
+    overflow-wrap: anywhere;
   }
-  .stage:not(.heaven) .boosts-live .power-chip { min-height: 27px; padding: 2px 5px; white-space: nowrap }
-  .stage:not(.heaven) .boosts-live .power-chip img { width: 18px; height: 19px }
-  .stage:not(.heaven):has(> .hud:not([hidden])) .toast { top: calc(var(--runner-top) + 82px) }
+  .stage:not(.heaven) .hud .pause { grid-column: 3; margin: 0 }
+  .stage:not(.heaven) .hud .runner-sound { grid-column: 4; display: grid; pointer-events: auto }
+  .stage:not(.heaven) .hud :is(.pause, .runner-sound) { width: var(--runner-button); height: var(--runner-button) }
+  .stage:not(.heaven) .boosts-live {
+    grid-column: 2;
+    position: static;
+    max-width: none;
+    flex-wrap: nowrap;
+    justify-content: start;
+    gap: 3px;
+  }
+  .stage:not(.heaven) .boosts-live .power-chip {
+    display: grid;
+    justify-items: center;
+    gap: 1px;
+    min-width: 27px;
+    padding: 2px 1px;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .stage:not(.heaven) .boosts-live .power-chip img { width: 18px; height: 18px }
+  .stage:not(.heaven):has(> .hud:not([hidden])) .toast { top: 10px }
+}
+@media (max-width: 360px) and (orientation: portrait) {
+  .stage:not(.heaven) .hud:has(.boosts-live:not([hidden])) .counter strong { font-size: 11px }
 }
 @media (orientation: landscape) and (max-height: 480px) {
   :root { --hud-top: 54px }
@@ -606,7 +624,7 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
 /* Title screen, story and pause */
 .shell:has(.main-menu:not([hidden])) .masthead { display: flex; justify-content: end }
 .shell:has(.main-menu:not([hidden])) .masthead > :is(.identity,.route) { display: none }
-.stage:has(.main-menu:not([hidden])) > canvas { visibility: hidden }
+.stage:has(.main-menu:not([hidden])) .runner-view > canvas { visibility: hidden }
 .shell:has(.main-menu:not([hidden])) #sound,
 .dialog-close {
   color: var(--wedding-title);
