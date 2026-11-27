@@ -48,8 +48,19 @@
   };
   const trackDuration = 192.329;
   const highwayStart = trackDuration-8;
-  const acceleration = .042;
-  const speedCurve = (t,initial=11.6) => initial*t + acceleration*t*t/2;
+  const initialSpeed = 11.6;
+  const baseAcceleration = .042;
+  function makeMotion(initial, acceleration, openingAcceleration = 0) {
+    return {
+      distance:t => {
+        const opening = Math.min(t,4);
+        return initial*t+acceleration*t*t/2+openingAcceleration*opening*(t-opening/2);
+      },
+      speed:t => initial+acceleration*t+openingAcceleration*Math.min(t,4)
+    };
+  }
+  const easyMotion = makeMotion(initialSpeed,baseAcceleration);
+  const hardMotion = makeMotion(initialSpeed,4*baseAcceleration,.22);
   const number = new Intl.NumberFormat("ru-RU");
   const money = rubles => number.format(rubles) + " ₽";
   const formatCapital = kopecks => money(kopecks/100);
@@ -84,8 +95,7 @@
     "КУПИ БУРГЕР!!!"
   ];
   const escapeVehicles = [
-    {id:"aveo",name:"ШЕВРОЛЕ АВЕО",price:0,nitro:1,topSpeed:135,boostSpeed:230},
-    {id:"rust",name:"КРЕСТЬЯНСКИЙ",price:1000000,nitro:4,topSpeed:150,boostSpeed:260},
+    {id:"rust",name:"КРЕСТЬЯНСКИЙ",price:0,nitro:4,topSpeed:150,boostSpeed:260},
     {id:"sanya",name:"ТЯГАЧ ДЯДЬ САНИ",price:5000000,nitro:6,topSpeed:165,boostSpeed:305},
     {id:"silver",name:"тягач свадебный лимузин",price:10000000,nitro:8,topSpeed:180,boostSpeed:350},
     {id:"diamond",name:"БРИЛЛИАНТОВЫЙ ОКУРОК",price:20000000,nitro:10,topSpeed:200,boostSpeed:400}
@@ -94,6 +104,7 @@
     "overlay","headline","description","eyebrow","primary","primary-label","secondary","results",
     "main-menu","menu-play","menu-story","menu-ost","menu-settings",
     "story","warning","warning-continue","ost","ost-tracks","ost-sound","settings","settings-guide","settings-sound",
+    "difficulty","difficulty-easy","difficulty-hard",
     "runner-pause","runner-guide","runner-controls","pause-resume","pause-restart","pause-menu",
     "result-money","result-distance","result-best","hud","money","distance","boosts-live","clock","progress",
     "chapter-label","route-hall","route-garden","pause","toast","sound","runner-sound","help",
@@ -128,6 +139,8 @@
   const compactRunnerHud = matchMedia("(max-width: 600px) and (orientation: portrait)");
 
   let mode = "menu";
+  let routeMotion = easyMotion;
+  let difficultyFromGarden = false;
   let t = 0;
   let startTime = 0;
   let distance = 0;
@@ -204,11 +217,12 @@
       return url;
     }).catch(() => null);
   const inHeaven = () => portal?.active === true;
+  const currentMotion = () => inHeaven() ? portal.motion : routeMotion;
   const brideFollowDistance = () => chaseDistance+(scene.portrait && !inHeaven()?portraitChaseOffset:0);
   const isCash = kind => kind === "note" || kind === "roof" || kind === "air";
   const isVehicle = kind => kind === "truck" || kind === "police";
 
-  function scatterBoosts(course, windows, place, initialSpeed) {
+  function scatterBoosts(course, windows, place, distanceAt) {
     const hazards = course.filter(entity => isVehicle(entity.kind) || ["barrier","ribbon"].includes(entity.kind));
     const groundRewards = course.filter(entity => entity.kind === "note" || (entity.kind === "sausage" && entity.y < 1));
     const placed = [];
@@ -222,8 +236,8 @@
           if (kind==="bottle" && other.kind==="leaf") return other.at>at && other.at<at+10.35;
           return false;
         })) continue;
-        const before = speedCurve(at-.36,initialSpeed);
-        const after = speedCurve(at+.30,initialSpeed);
+        const before = distanceAt(at-.36);
+        const after = distanceAt(at+.30);
         for (const lane of lanes) {
           if (hazards.some(obstacle => obstacle.lane===lane &&
               obstacle.position-(obstacle.ramp || .15)<after &&
@@ -239,14 +253,14 @@
     }
   }
 
-  function makeCourse() {
+  function makeCourse(motion) {
     const course = [];
     const windows = [["magnet",3.48,3.98],["bottle",6.45,7.20],["leaf",17.80,18.35],
       ["boots",18.78,19.30]];
     const safePattern = [0,-1,0,1,1,0,-1,0,-1,1,0,1];
     let trucks = 0;
     const add = (kind, time, path, extra = {}) => course.push({
-      kind, t:time, lane:path, position:speedCurve(time),
+      kind, t:time, lane:path, position:motion.distance(time),
       y:.83, used:false, ...extra
     });
     const note = (time,path) => add("note",time,path);
@@ -263,7 +277,9 @@
     const truck = (time,path,brand,ramp=false) => {
       add("truck",time,path,{brand,length:truckLength,ramp:ramp?rampLength:0});
       const offsets = trucks++%2===0 ? [.30,.58] : [.45];
-      for (const offset of offsets) add("roof",time+offset,path,{y:roofHeight+.80});
+      // Keep the bills on the truck roof as the distance covered per second grows.
+      const timeScale = easyMotion.speed(time)/motion.speed(time);
+      for (const offset of offsets) add("roof",time+offset*timeScale,path,{y:roofHeight+.80});
     };
 
     for (let i=0;i<3;i++) note(1.05 + i*1.08,0);
@@ -305,13 +321,13 @@
     for (let time=85.7;time<90;time+=.84) note(time,exitLane);
     add("exit",hallEnd,exitLane);
     for (let i=1;i<=3;i++) note(90.25+i*.70,exitLane);
-    scatterBoosts(course,windows.map(([kind,from,to])=>[kind,from,Math.min(to,highwayStart-.6)]),pickup);
+    scatterBoosts(course,windows.map(([kind,from,to])=>[kind,from,Math.min(to,highwayStart-.6)]),pickup,motion.distance);
     return course.sort((a,b) => a.position-b.position);
   }
 
-  function makeHeavenCourse(initialSpeed) {
+  function makeHeavenCourse(motion) {
     const course = [];
-    const add = (kind,t,lane,extra) => course.push({kind,t,lane,position:speedCurve(t,initialSpeed),
+    const add = (kind,t,lane,extra) => course.push({kind,t,lane,position:motion.distance(t),
       y:.83,used:false,...extra});
     const rows = [
       [2.38,1,[[0,"skoda"]]],
@@ -334,7 +350,7 @@
     }
     scatterBoosts(course,[["hood",1.10,4.24],["boots",2.35,5.66],
       ["magnet",4.55,7.54],["multiplier",10.4,17.4]],
-      (kind,at,lane)=>add(kind,at,lane,kind==="multiplier"?{y:1.32,factor:2}:{y:1.10}),initialSpeed);
+      (kind,at,lane)=>add(kind,at,lane,kind==="multiplier"?{y:1.32,factor:2}:{y:1.10}),motion.distance);
     const bus = WeddingModels.policeDimensions.bus;
     for (const at of [7.58,7.76,7.94,8.12]) {
       add("sausage",at,0,{y:bus.height+.82});
@@ -342,11 +358,11 @@
     return course.sort((a,b)=>a.position-b.position);
   }
 
-  const menuCourse = makeCourse();
+  const menuCourse = makeCourse(easyMotion);
   function findGardenFlightGaps(course) {
     return course.filter(item=>item.kind==="bottle" && item.t>=hallEnd).flatMap(({t:launch})=>[
-      [speedCurve(launch-.2)+playerZ,speedCurve(launch+.58)+playerZ],
-      [speedCurve(launch+9.98)+playerZ,speedCurve(launch+10.86)+playerZ]
+      [routeMotion.distance(launch-.2)+playerZ,routeMotion.distance(launch+.58)+playerZ],
+      [routeMotion.distance(launch+9.98)+playerZ,routeMotion.distance(launch+10.86)+playerZ]
     ]);
   }
   let gardenFlightGaps=findGardenFlightGaps(menuCourse);
@@ -359,7 +375,7 @@
       const side = Math.random()<.5 ? -1 : 1;
       appearances.push({
         time, person, side, x:side*(5.48+Math.random()*.42),
-        position:speedCurve(time+guestApproach)+8+Math.random()*3,
+        position:routeMotion.distance(time+guestApproach)+8+Math.random()*3,
         message:messages[Math.floor(Math.random()*messages.length)], garden:time>=hallEnd
       });
       person = (person+1)%guestMessages.length;
@@ -370,7 +386,7 @@
   function makePaintings() {
     const firstSide = Math.random()<.5 ? -1 : 1;
     return WeddingScene.pickPhotos(Math.ceil(hallEnd/paintingInterval)-1).map((image,i)=>({
-      side:firstSide*(i%2 ? -1 : 1),image,position:speedCurve((i+1)*paintingInterval)+21.5
+      side:firstSide*(i%2 ? -1 : 1),image,position:routeMotion.distance((i+1)*paintingInterval)+21.5
     }));
   }
 
@@ -455,7 +471,7 @@
 
     if (next === "lost") {
       ui["result-money"].textContent = formatCapital(runEarningsKopecks);
-      ui["result-distance"].textContent = number.format(Math.floor(distance-speedCurve(startTime))) + " м";
+      ui["result-distance"].textContent = number.format(Math.floor(distance-routeMotion.distance(startTime))) + " м";
       ui["result-best"].textContent = formatCapital(best);
     }
   }
@@ -720,7 +736,7 @@
 
   function resetMotion(time,path) {
     t = time;
-    distance = speedCurve(t);
+    distance = currentMotion().distance(t);
     lane = path;
     x = brideX = brideTarget = lane * laneWidth;
     chaseGap = brideFollowDistance();
@@ -764,7 +780,7 @@
     shield = false;
     acquiredVehicles.clear();
     selectedVehicle = null;
-    simulation = makeCourse();
+    simulation = makeCourse(routeMotion);
     placeOnRoute(fromGarden ? hallEnd : 0);
     gardenFlightGaps = findGardenFlightGaps(simulation);
     guests = makeGuests(startTime);
@@ -907,7 +923,8 @@
     heavenAudio.currentTime = 0;
     heavenAudio.play().catch(() => {});
     ui.toast.hidden = true;
-    portal = {route,capital:capitalKopecks,initialSpeed:11.6+acceleration*t,phase:"enter",elapsed:0,active:false,
+    // Paradise keeps its original pace for the current point in the wedding track.
+    portal = {route,capital:capitalKopecks,motion:makeMotion(easyMotion.speed(t),baseAcceleration),phase:"enter",elapsed:0,active:false,
       sausages:0,multipliedSausages:0,factor:1};
   }
 
@@ -997,7 +1014,7 @@
       if (phase === "enter" && !visit.active) {
         visit.active = true;
         resetMotion(0,0);
-        simulation = makeHeavenCourse(visit.initialSpeed);
+        simulation = makeHeavenCourse(visit.motion);
         firstVisible = 0;
         updateRoute();
         updateHud();
@@ -1173,7 +1190,7 @@
     if (flying) brideAway = Math.min(1,brideAway+dt/.78);
     else if (grounded) brideAway = Math.max(0,brideAway-dt/.85);
 
-    const pace = (inHeaven()?portal.initialSpeed:11.6)+acceleration*t;
+    const pace = currentMotion().speed(t);
     const ahead = brideDistance+pace*laneShiftDuration;
     const blocked = !bridePathClear(brideX,brideX,brideDistance,ahead);
     if (!brideShift) {
@@ -1311,7 +1328,8 @@
     const dt = nextTime-t;
     t = nextTime;
     const heaven = inHeaven();
-    distance = speedCurve(t,heaven?portal.initialSpeed:undefined);
+    const motion = currentMotion();
+    distance = motion.distance(t);
     const previousX = x;
     updateRunnerLane();
     if (sideRebound && (!besideTruck(sideRebound,distance) || Math.abs(x-sideRebound.lane*laneWidth) >= laneWidth-.20)) {
@@ -1341,7 +1359,7 @@
     }
     const attracting = t<magnetUntil;
     if (previousTime<magnetUntil && !attracting) {
-      magnetThrow = {time:t,distance,pace:(heaven?portal.initialSpeed:11.6)+acceleration*t};
+      magnetThrow = {time:t,distance,pace:motion.speed(t)};
     }
     for (let index=firstVisible; index<simulation.length; index++) {
       const entity = simulation[index];
@@ -1399,8 +1417,10 @@
 
   function advance(target) {
     const visit = portal;
+    // Keep each step shorter than the collision window of thin barriers and ribbons.
+    const step = !visit && routeMotion === hardMotion ? Math.min(1/90,.35/hardMotion.speed(target)) : 1/90;
     while (mode === "playing" && portal === visit && (!visit || visit.phase === "run") && t < target) {
-      updateStep(Math.min(target,t+1/90));
+      updateStep(Math.min(target,t+step));
     }
   }
 
@@ -1495,7 +1515,7 @@
     }
     setText(ui.money,formatCapital(portal?.caught ? fineCapital(portal) : capitalKopecks));
     if (compact) return;
-    setText(ui.distance,number.format(Math.floor(distance-speedCurve(startTime))) + " м");
+    setText(ui.distance,number.format(Math.floor(distance-routeMotion.distance(startTime))) + " м");
     const chapterStart = garden ? hallEnd : 0;
     const chapterEnd = garden ? (audio.duration || trackDuration) : hallEnd;
     const seconds = t-chapterStart;
@@ -1510,6 +1530,7 @@
   function returnToMenu() {
     ++processTicket;
     pauseMusic();
+    routeMotion = easyMotion;
     reset(false);
     setMode("menu");
     ui["menu-play"].focus({preventScroll:true});
@@ -1623,7 +1644,7 @@
     ui.settings.close();
     restoreRunnerGuide();
     if (time === 0 || time === hallEnd) {
-      begin(time === hallEnd);
+      openDifficulty(time === hallEnd);
       return;
     }
     reset(false);
@@ -1677,13 +1698,25 @@
   window.addEventListener("click",playMenuMusic);
 
   const openWarning = () => ui.warning.showModal();
+  function openDifficulty(fromGarden = false) {
+    difficultyFromGarden = fromGarden;
+    ui.difficulty.showModal();
+  }
   ui["menu-play"].addEventListener("click",openWarning);
   ui["menu-story"].addEventListener("click",() => ui.story.showModal());
   ui.story.addEventListener("close",() => { ui.story.querySelector(".story-scroll").scrollTop = 0; });
   ui["warning-continue"].addEventListener("click",() => {
     ui.warning.close();
-    begin();
+    openDifficulty();
   });
+  for (const [id,motion] of [["difficulty-easy",easyMotion],["difficulty-hard",hardMotion]]) {
+    ui[id].addEventListener("click",() => {
+      if (!ui.difficulty.open) return;
+      ui.difficulty.close();
+      routeMotion = motion;
+      begin(difficultyFromGarden);
+    });
+  }
   ui.primary.addEventListener("click",() => begin());
   ui.secondary.addEventListener("click",() => begin(true));
   ui.pause.addEventListener("click",pause);
@@ -1722,7 +1755,7 @@
       if (mode !== "campus") campusAudio.pause();
     }).catch(() => {});
     ui["garage-continue"].disabled = true;
-    const started = await drive.start(vehicle);
+    const started = await drive.start(vehicle,routeMotion === hardMotion ? 20 : 0);
     renderGarage();
     if (!started) {
       playGarageMusic();
@@ -1788,7 +1821,7 @@
   });
   const keys = {ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",ArrowUp:"up",KeyW:"up",ArrowDown:"down",KeyS:"down"};
   window.addEventListener("keydown",event => {
-    if (ui.warning.open || ui.story.open || ui.ost.open || ui.settings.open ||
+    if (ui.warning.open || ui.difficulty.open || ui.story.open || ui.ost.open || ui.settings.open ||
         event.target.closest?.("input") || event.altKey || event.ctrlKey || event.metaKey) return;
     if (mode === "driving") {
       drive.keydown(event);
@@ -1914,7 +1947,7 @@
       flying:flight, boots:t<bootsUntil, slide, mount, gardenFlightGaps, guests, paintings, airships, magnetTrails,
       magnetHeld:t<magnetUntil, magnetThrow,
       gardenProgress:Math.max(0,Math.min(1,(t-hallEnd)/(highwayStart-hallEnd))),
-      yardAhead:garden ? Math.max(0,speedCurve(trackDuration)-distance) : Infinity,
+      yardAhead:garden ? Math.max(0,routeMotion.distance(trackDuration)-distance) : Infinity,
       visible:visibleEntities()
     }, now/1000);
     showSpeech(ui["guest-speech"],speeches?.guest);

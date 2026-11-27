@@ -1,7 +1,7 @@
 "use strict";
 
 window.WeddingCampusInterior = class WeddingCampusInterior {
-  static gates = [13,25,37,49,61];
+  static gates = [13,25,37,49,61,73,85];
   static doorX = 2.37;
   static doorWidth = 3.04;
   static doorInset = .12;
@@ -30,7 +30,7 @@ window.WeddingCampusInterior = class WeddingCampusInterior {
       if (clipped.length>=3) this.lastBay.faces.push([clipped,color]);
     }
     this.dormWall = this.makeDormWall();
-    this.portals = ["774450","305a58","4c5671","80503e","493a61"].map(color=>this.makePortal(color));
+    this.portals = ["774450","305a58","4c5671","80503e","685036","3d5859","493a61"].map(color=>this.makePortal(color));
     this.bench = this.makeBench();
     this.doors = [-1,1].map(side=>({
       side,
@@ -38,7 +38,7 @@ window.WeddingCampusInterior = class WeddingCampusInterior {
       rejected:this.makeDoor(side,"8b312d","d35643","ff9274"),
       open:this.makeDoor(side,"26503c","479568","b5efa8")
     }));
-    this.teachers = Array.from({length:5},(_,index)=>new Map([[0,this.makeTeacher(index,0,0)]]));
+    this.teachers = WeddingCampusInterior.gates.map((_,index)=>new Map([[0,this.makeTeacher(index,0,0)]]));
     this.bridePoses = new Map();
     this.heroResistPoses = new Map();
     this.shadow = new WeddingModels.Mesh();
@@ -309,9 +309,9 @@ window.WeddingCampusInterior = class WeddingCampusInterior {
   makeTeacher(index,block,laugh) {
     const m = new WeddingModels.Mesh();
     const head = new WeddingModels.Mesh();
-    const jacket = ["594343","465461","595046","45454d","503d4e"][index];
-    const skin = ["d5a486","ba8b71","ddae89","c49576","dfae8b"][index];
-    const hair = ["493b39","77716c","413535","675653","a19384"][index];
+    const jacket = ["594343","465461","595046","45454d","534b36","3b5052","503d4e"][index];
+    const skin = ["d5a486","ba8b71","ddae89","c49576","cc9a77","b7816a","dfae8b"][index];
+    const hair = ["493b39","77716c","413535","675653","5e4c38","48413c","a19384"][index];
     const shoulderLift = .075*laugh+.025*Math.abs(block);
     const tilt = -.33*laugh;
     const cos = Math.cos(tilt), sin = Math.sin(tilt);
@@ -407,7 +407,7 @@ window.WeddingCampusInterior = class WeddingCampusInterior {
       if (z+3>p.cameraDepth-6) layer.add(this.bay,0,0,z,0);
     }
     if (entrance>p.cameraDepth-6) layer.add(this.lastBay,0,0,entrance,0);
-    for (let z=5;z<70;z+=12) {
+    for (let z=5;z<entrance-2;z+=12) {
       if (z+1>p.cameraDepth-6) {
         layer.add(this.bench,4.35,0,z,0);
         layer.add(this.bench,-4.35,0,z+1.45,Math.PI);

@@ -334,7 +334,7 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
 .garage-buy:hover:not(:disabled) { background: #ffdaa7 }
 .garage-buy:disabled { opacity: 1; cursor: default; border-color: #465568; background: #222e3d; color: #cbd4df }
 #garage-status { min-height: 1.35em; margin: 0; font-size: 13px; line-height: 1.33; color: #c8cfda }
-.truck-options { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 8px }
+.truck-options { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px }
 .truck-option { display: flex; flex-direction: column; color: inherit; min-width: 0; padding: 0 0 8px; text-align: left; border: 1px solid #495869; border-radius: 8px; background: #1a2534; overflow: hidden; overflow-wrap: anywhere }
 .truck-option:hover { border-color: #b8a88e; background: #243245 }
 .truck-option[aria-pressed=true] { border-color: #ffd39e; box-shadow: inset 0 0 0 1px #ffd39e; background: #293545 }
@@ -358,11 +358,8 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
   .garage-buy { grid-column: 2; grid-row: 2; min-height: 38px; font-size: 13px }
   #garage-status { grid-column: 1 / -1 }
   #garage-status:empty { display: none }
-  .truck-options { grid-template-columns: repeat(3,minmax(0,1fr)); gap: 6px }
+  .truck-options { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 6px }
   .truck-option strong,.truck-option span { padding-inline: 6px; font-size: 11px }
-}
-@media (max-width: 460px) {
-  .truck-options { grid-template-columns: repeat(2,minmax(0,1fr)) }
 }
 @media (prefers-reduced-motion: reduce) {
   .parking-screen, .parking-panel { animation: none }
@@ -732,7 +729,7 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
 .story-scroll { min-height: 0; overflow-y: auto; padding: 0 8px 4px 2px; overscroll-behavior: contain }
 .story-scroll:focus-visible { outline: 2px solid #ffe9bf; outline-offset: -2px; border-radius: 4px }
 .story-scroll p { margin: 0 0 1em; font-size: 1rem; line-height: 1.6 }
-#warning[open] {
+#warning[open], #difficulty[open] {
   width: min(420px, 100%);
   height: fit-content;
   max-height: calc(100dvh - 24px);
@@ -756,6 +753,11 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
   letter-spacing: .04em;
 }
 #warning .primary:focus-visible { outline-color: #ffdfae }
+
+#difficulty[open] { width: min(360px, 100%); gap: 18px; padding-bottom: 24px }
+#difficulty-title { font-size: clamp(26px, 7.6vw, 34px) }
+.difficulty-options { width: 100%; display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px }
+.difficulty-options .primary { min-height: 48px; padding: 0 10px }
 
 #ost[open], #settings[open] {
   width: min(500px, 100%);

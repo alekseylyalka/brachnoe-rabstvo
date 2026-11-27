@@ -1,8 +1,9 @@
 "use strict";
 
 window.WeddingCampusDorm = class WeddingCampusDorm {
-  static entranceZ = 72;
-  static residentZ = 79.1;
+  static roomModelEntranceZ = 72;
+  static entranceZ = 96;
+  static residentZ = this.entranceZ+7.1;
   static rate = 2500;
 
   constructor() {
@@ -52,7 +53,7 @@ window.WeddingCampusDorm = class WeddingCampusDorm {
   makeRoom() {
     const m = new WeddingModels.Mesh();
     const rose = "d791ab", ivory = "ffe1d7", brass = "c39873";
-    const entry = WeddingCampusDorm.entranceZ;
+    const entry = WeddingCampusDorm.roomModelEntranceZ;
     const back = 83.4, center = (back+entry)/2, depth = back-entry;
     m.box(0,2.46,back,8.9,4.92,.30,"e7a5b9");
     m.box(0,4.92,center,8.9,.16,depth,"f6ced5");
@@ -220,11 +221,11 @@ window.WeddingCampusDorm = class WeddingCampusDorm {
   }
 
   draw(layer,shadow,opening,morph) {
-    const {entranceZ,residentZ} = WeddingCampusDorm;
+    const {entranceZ,residentZ,roomModelEntranceZ} = WeddingCampusDorm;
     // The hinge stays fixed while the number plate follows the door leaf.
     layer.add(this.door,-1.66,0,entranceZ-.22,-opening*1.54);
     if (!opening) return;
-    layer.add(this.room,0,0,0,0);
+    layer.add(this.room,0,0,entranceZ-roomModelEntranceZ,0);
     layer.add(shadow,0,.012,residentZ,0,[.28+.61*morph,1,.22+.27*morph]);
     const scale = [1+.60*morph,1.12,1];
     layer.add(this.pose(morph),0,0,residentZ,Math.PI,scale);

@@ -50,7 +50,7 @@ window.WeddingCampusQuiz = class WeddingCampusQuiz {
       const j = Math.floor(Math.random()*(i+1));
       [deck[i],deck[j]] = [deck[j],deck[i]];
     }
-    this.rounds = [...deck.slice(0,4),WeddingCampusQuiz.finalQuestion].map(([question,right,wrong])=>{
+    this.rounds = [...deck.slice(0,WeddingCampusInterior.gates.length-1),WeddingCampusQuiz.finalQuestion].map(([question,right,wrong])=>{
       const correct = Math.random()<.5 ? 0 : 1;
       return {question,correct,answers:correct===0 ? [right,wrong] : [wrong,right]};
     });

@@ -6,7 +6,7 @@ window.WeddingDrive = class WeddingDrive {
     {name:"ЭНЕМ",at:.545}, {name:"КРАСНОДАР",at:.766}, {name:"ГАУМАНКА",at:1}
   ];
   static nitroUnlock = 5;
-  static chaseSpeed = 130/3.6;
+  static cruiseSpeed = 130/3.6;
   static trafficSpeed = 60/3.6;
   static chaseStartLane = 2;
   static chaseReveal = 2.64;
@@ -86,7 +86,7 @@ window.WeddingDrive = class WeddingDrive {
     this.ui.sound.textContent = muted ? "♪̸" : "♪";
   }
 
-  async start(vehicle) {
+  async start(vehicle,extraChaseKmh = 0) {
     if (this.phase!=="idle") return;
     this.phase = "starting";
     if (this.track.error) this.track.load();
@@ -106,20 +106,21 @@ window.WeddingDrive = class WeddingDrive {
     }
     this.track.currentTime = 0;
     this.duration = this.track.duration;
-    const finishMeters = this.duration*WeddingDrive.chaseSpeed;
+    const cruise = WeddingDrive.cruiseSpeed;
+    const finishMeters = this.duration*cruise;
     this.afterTrackAt = null;
     this.root.classList.remove("campus-view","campus-walk");
     this.lastHudTime = -Infinity;
     this.clearControls();
     this.state = {
-      elapsed:0, distance:0, speed:WeddingDrive.chaseSpeed, roadSpeed:WeddingDrive.chaseSpeed, vehicle:vehicle.id,
+      elapsed:0, distance:0, speed:cruise, roadSpeed:cruise, vehicle:vehicle.id,
       topSpeed:vehicle.topSpeed/3.6, boostSpeed:vehicle.boostSpeed/3.6,
       isTruck:vehicle.id!=="aveo", nitro:vehicle.nitro, reserve:vehicle.nitro, boost:0, impact:0, passed:0,
       speedUnlocked:false, finishTime:null, finishMeters, arrival:null,
       x:WeddingHighway.laneX(WeddingDrive.startLane), lateral:0, heading:0, tilt:0, sideContact:false,
       // The red truck is already on the road when the camera reveals it.
       chase:{x:WeddingHighway.laneX(WeddingDrive.chaseStartLane),lane:WeddingDrive.chaseStartLane,
-        meters:0,previous:0,z:0,lean:0,speed:WeddingDrive.chaseSpeed,visible:false,turn:null},
+        meters:0,previous:0,z:0,lean:0,speed:cruise,extraSpeed:extraChaseKmh/3.6,visible:false,turn:null},
       traffic:[], nextCar:47, carsSpawned:0,
       banners:WeddingScene.pickPhotos(WeddingDrive.bannerCount).map((image,index)=>({
         image,side:index%2 ? 1 : -1,meters:finishMeters*(index+.5)/WeddingDrive.bannerCount
@@ -291,8 +292,11 @@ window.WeddingDrive = class WeddingDrive {
     const {state} = this;
     const {elapsed,chase} = state;
     const body = WeddingDrive.hulls.chase;
+    // Keep the opening in sync until nitro is available to the player.
+    const pursuitTime = Math.max(0,elapsed-WeddingDrive.nitroUnlock);
     chase.previous = chase.meters;
-    chase.meters = elapsed*WeddingDrive.chaseSpeed;
+    chase.meters = elapsed*WeddingDrive.cruiseSpeed+pursuitTime*chase.extraSpeed;
+    chase.speed = WeddingDrive.cruiseSpeed+(pursuitTime>0 ? chase.extraSpeed : 0);
     chase.visible = elapsed>=WeddingDrive.chaseReveal;
     if (elapsed<5.7) return;
 
@@ -488,7 +492,7 @@ window.WeddingDrive = class WeddingDrive {
     const {state} = this;
     const throttle = this.throttleKeys.size || this.touchThrottle;
     const cruise = !state.speedUnlocked;
-    const target = cruise ? WeddingDrive.chaseSpeed : burn ? state.boostSpeed : throttle ? state.topSpeed : 0;
+    const target = cruise ? WeddingDrive.cruiseSpeed : burn ? state.boostSpeed : throttle ? state.topSpeed : 0;
     const acceleration = state.isTruck ? 1.85 : 2.15;
     const rate = burn ? (state.isTruck ? 12.5 : 29) : state.speed>state.topSpeed ? 22 : throttle ? acceleration : 5.85;
     const speed = WeddingDrive.approach(state.speed,target,rate*step);
@@ -498,7 +502,7 @@ window.WeddingDrive = class WeddingDrive {
       car.hit = true;
     });
     state.roadSpeed = next===wanted ? speed : Math.max(0,(next-state.distance)/step);
-    state.speed = state.speedUnlocked ? state.roadSpeed : WeddingDrive.chaseSpeed;
+    state.speed = state.speedUnlocked ? state.roadSpeed : WeddingDrive.cruiseSpeed;
     state.distance = next;
     for (const car of state.traffic) {
       if (!car.passed && car.meters+WeddingModels.roadTraffic[car.model].front < state.distance-hull.rear-.12) {
@@ -592,7 +596,7 @@ window.WeddingDrive = class WeddingDrive {
 
   checkCapture(hull) {
     const {state} = this, chase = state.chase;
-    if (!chase.visible || state.roadSpeed>=WeddingDrive.chaseSpeed-.025) return;
+    if (!chase.visible || state.roadSpeed>=chase.speed-.025) return;
     const gap = state.distance-chase.meters;
     const side = Math.abs(state.x-chase.x);
     const body = WeddingDrive.hulls.chase;
