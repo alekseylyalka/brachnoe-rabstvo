@@ -2,17 +2,6 @@
 
 (() => {
   const byId = id => document.getElementById(id);
-  const touchScreen = matchMedia("(any-pointer: coarse)");
-  const landscapeScreen = matchMedia("(orientation: landscape)");
-  const mobileTelegram = () => {
-    const telegram = window.Telegram?.WebApp;
-    const platform = telegram?.platform;
-    return platform==="ios" || platform==="android" || platform==="android_x" ? telegram : null;
-  };
-  const isMobileGame = () => touchScreen.matches || Boolean(mobileTelegram());
-  const needsLandscape = () => isMobileGame() && !landscapeScreen.matches;
-  const gameSuspended = () => document.hidden || needsLandscape();
-  document.documentElement.classList.toggle("mobile-game",isMobileGame());
   const audio = byId("track");
   const heavenAudio = byId("heaven-track");
   const campusAudio = byId("campus-track");
@@ -103,7 +92,6 @@
     "overlay","headline","description","eyebrow","primary","primary-label","secondary","results",
     "main-menu","menu-play","menu-story","menu-ost","menu-settings",
     "story","warning","warning-continue","ost","ost-tracks","ost-sound","settings","settings-guide","settings-sound",
-    "landscape-required","landscape-fullscreen",
     "runner-pause","runner-guide","runner-controls","pause-resume","pause-restart","pause-menu",
     "result-money","result-distance","result-best","hud","money","distance","boosts-live","clock","progress",
     "chapter-label","route-hall","route-garden","pause","toast","sound","help",
@@ -137,6 +125,7 @@
   }
   const chips = makeChips(ui["boosts-live"],Object.keys(boosts));
   const heavenChips = makeChips(ui["heaven-boosts"],["hood","boots","magnet","multiplier"]);
+  const compactRunnerHud = matchMedia("(max-width: 600px) and (orientation: portrait)");
 
   let mode = "menu";
   let t = 0;
@@ -551,13 +540,13 @@
   }
 
   function playMenuMusic() {
-    if (mode === "menu" && !ui.ost.open && !gameSuspended() && menuAudio.paused) {
+    if (mode === "menu" && !ui.ost.open && !document.hidden && menuAudio.paused) {
       menuAudio.play().catch(() => {});
     }
   }
 
   function playGarageMusic() {
-    if (mode === "garage" && drive.phase === "idle" && !gameSuspended()) {
+    if (mode === "garage" && drive.phase === "idle" && !document.hidden) {
       garageAudio.play().catch(() => {});
     }
   }
@@ -829,7 +818,7 @@
       if (ticket !== processTicket) return;
       if (Math.abs(audio.currentTime-startTime)>.85) throw new Error("Wrong audio position");
       mixMusic(1,0);
-      if (gameSuspended()) {
+      if (document.hidden) {
         pauseMusic();
         setMode("paused");
       } else {
@@ -878,7 +867,7 @@
 
   async function resume() {
     const button = ui["pause-resume"];
-    if (mode !== "paused" || button.disabled || gameSuspended()) return;
+    if (mode !== "paused" || button.disabled) return;
     button.disabled = true;
     const ticket = ++processTicket;
     unlockMusic();
@@ -888,7 +877,7 @@
       if ((phase && phase !== "fine") || returnFade?.heaven) heavenAudio.play().catch(() => {});
       await wedding;
       if (ticket !== processTicket) return;
-      if (gameSuspended()) {
+      if (document.hidden) {
         pauseMusic();
         button.disabled = false;
         return;
@@ -1462,7 +1451,7 @@
     const active = {bottle:Math.ceil(flightUntil-t),hood:shield?1:0,boots:Math.ceil(bootsUntil-t),
       magnet:Math.ceil(magnetUntil-t),multiplier:(portal?.factor ?? 1)-1};
     const heaven = inHeaven();
-    const compact = !heaven && isMobileGame();
+    const compact = !heaven && compactRunnerHud.matches;
     let hasBoosts = false;
     for (const [kind,{chip,icon,value}] of Object.entries(heaven?heavenChips:chips)) {
       const hidden = active[kind]<=0 || (compact && kind==="hood");
@@ -1535,7 +1524,7 @@
     setMode("campus");
     mixMusic(0,0,.74);
     campusAudio.currentTime = 0;
-    if (!gameSuspended()) campusAudio.play().catch(() => {});
+    if (!document.hidden) campusAudio.play().catch(() => {});
     campus.start(time,passes);
     campus.frame(0);
     if (time!==undefined) {
@@ -1549,7 +1538,7 @@
 
   const drive = new WeddingDrive({scene,track:byId("drive-track"),root:byId("drive"),fade:driveFade,
     caught:byId("drive-caught"),onCaught:()=>begin(),onCampus:enterCampus,
-    onMainMenu:returnToMenu,canTeleport:()=>adminUnlocked,isSuspended:gameSuspended,
+    onMainMenu:returnToMenu,canTeleport:()=>adminUnlocked,
     onEnter:()=>setMode("driving"),onExit:()=>{
       renderGarage();
       setMode("garage");
@@ -1753,7 +1742,7 @@
   });
   document.addEventListener("visibilitychange",() => {
     if (mode === "menu") {
-      if (gameSuspended()) {
+      if (document.hidden) {
         menuAudio.pause();
         ostAudio.pause();
       } else {
@@ -1762,12 +1751,12 @@
       return;
     }
     if (mode === "garage") {
-      if (gameSuspended()) garageAudio.pause();
+      if (document.hidden) garageAudio.pause();
       else playGarageMusic();
       return;
     }
     if (mode === "campus") {
-      if (gameSuspended()) campusAudio.pause();
+      if (document.hidden) campusAudio.pause();
       else campusAudio.play().catch(() => {});
       return;
     }
@@ -1780,7 +1769,7 @@
   });
   const keys = {ArrowLeft:"left",KeyA:"left",ArrowRight:"right",KeyD:"right",ArrowUp:"up",KeyW:"up",ArrowDown:"down",KeyS:"down"};
   window.addEventListener("keydown",event => {
-    if (needsLandscape() || ui.warning.open || ui.story.open || ui.ost.open || ui.settings.open ||
+    if (ui.warning.open || ui.story.open || ui.ost.open || ui.settings.open ||
         event.target.closest?.("input") || event.altKey || event.ctrlKey || event.metaKey) return;
     if (mode === "driving") {
       drive.keydown(event);
@@ -1841,10 +1830,6 @@
   function frame(now) {
     const dt = previousFrame ? Math.min(.25,(now-previousFrame)/1000) : 0;
     previousFrame = now;
-    if (needsLandscape()) {
-      requestAnimationFrame(frame);
-      return;
-    }
     if (mode === "menu") {
       scene.sampleDisplayInterval(dt);
       requestAnimationFrame(frame);
@@ -1918,59 +1903,10 @@
     requestAnimationFrame(frame);
   }
 
-  function syncOrientation() {
-    const mobile = isMobileGame();
-    const root = document.documentElement;
-    if (root.classList.contains("mobile-game") !== mobile) {
-      root.classList.toggle("mobile-game",mobile);
-      scene.resize();
-      if (mode === "playing" || mode === "paused") updateHud();
-    }
-    const prompt = ui["landscape-required"];
-    if (needsLandscape()) {
-      pointer = null;
-      pause();
-      drive.pause();
-      for (const track of [menuAudio,ostAudio,garageAudio,campusAudio]) track.pause();
-      if (!prompt.open) prompt.showModal();
-    } else if (prompt.open) {
-      prompt.close();
-      playMenuMusic();
-      playGarageMusic();
-      if (mode === "campus" && !gameSuspended()) campusAudio.play().catch(() => {});
-    }
-  }
-
-  let connectedTelegram;
-  function connectTelegram() {
-    const telegram = window.Telegram?.WebApp;
-    if (!telegram || telegram===connectedTelegram) return;
-    connectedTelegram = telegram;
-    syncTelegramSwipes();
-    syncOrientation();
-    if (!mobileTelegram()) return;
-    telegram.ready();
-    if (!telegram.isVersionAtLeast("8.0")) {
-      telegram.expand();
-      return;
-    }
-    if (telegram.isOrientationLocked) telegram.unlockOrientation();
-    const syncFullscreen = () => {
-      ui["landscape-fullscreen"].hidden = telegram.isFullscreen;
-      scene.resize();
-    };
-    telegram.onEvent("fullscreenChanged",syncFullscreen);
-    telegram.onEvent("safeAreaChanged",() => scene.resize());
-    telegram.onEvent("contentSafeAreaChanged",() => scene.resize());
-    syncFullscreen();
-    if (!telegram.isFullscreen) telegram.requestFullscreen();
-  }
-
-  ui["landscape-required"].addEventListener("cancel",event => event.preventDefault());
-  ui["landscape-fullscreen"].addEventListener("click",() => mobileTelegram()?.requestFullscreen());
-  landscapeScreen.addEventListener("change",syncOrientation);
-  touchScreen.addEventListener("change",syncOrientation);
-  byId("telegram-web-app")?.addEventListener("load",connectTelegram,{once:true});
+  compactRunnerHud.addEventListener("change",() => {
+    if (mode === "playing" || mode === "paused") updateHud();
+  });
+  byId("telegram-web-app")?.addEventListener("load",syncTelegramSwipes,{once:true});
   updateSound();
   if (previewOnly) {
     garden = true;
@@ -1979,7 +1915,5 @@
   } else {
     setMode("menu");
   }
-  syncOrientation();
-  connectTelegram();
   requestAnimationFrame(frame);
 })();
