@@ -2666,17 +2666,17 @@ window.WeddingScene = class WeddingScene {
 
   framePortraitBride(x,z,retreat) {
     const margin=Math.max(8,this.w*.025);
-    // The dress hem is the closest part of the animated model to the bottom edge.
+    // Keep the hem below the frame while leaving room for the upper body.
     const hemY=-.11;
     const hemZ=-.68;
-    const bottom=this.h-margin-this.safeBottom-retreat;
+    const bottom=this.h+Math.max(this.h*.065,this.h*.09-this.safeBottom)-retreat;
     const minDepth=(this.eye-hemY)*this.fy/(bottom-this.horizon);
-    z=Math.max(z,minDepth-this.depth(hemY,hemZ));
+    z=Math.max(z-.45,minDepth-this.depth(hemY,hemZ));
 
-    const skirtHalfWidth=1.49;
-    const unitsPerPixel=this.depth(.31,z-.64)/this.fx;
-    const left=this.cameraX+(margin-this.cx)*unitsPerPixel+skirtHalfWidth;
-    const right=this.cameraX+(this.w-margin-this.cx)*unitsPerPixel-skirtHalfWidth;
+    const upperBodyHalfWidth=.98;
+    const unitsPerPixel=this.depth(1.1,z-.35)/this.fx;
+    const left=this.cameraX+(margin-this.cx)*unitsPerPixel+upperBodyHalfWidth;
+    const right=this.cameraX+(this.w-margin-this.cx)*unitsPerPixel-upperBodyHalfWidth;
     return {x:Math.max(left,Math.min(right,x)),z};
   }
 
@@ -3046,13 +3046,13 @@ window.WeddingScene = class WeddingScene {
     const altitude=state.flying?1:Math.min(.68,state.groundY*.26+Math.max(0,state.playerY-state.groundY)*.055);
     const lineupFraming=garden ? Math.max(0,Math.min(1,1-state.yardAhead/55)) : 0;
     // Limit the portrait camera’s sideways travel so the opposite lane stays in view.
-    const cameraFollow=(closeCamera?.15:portraitRun?.22:.46)*(1-lineupFraming)+.12*lineupFraming;
+    const cameraFollow=(closeCamera?.09:portraitRun?.22:.46)*(1-lineupFraming)+.12*lineupFraming;
     this.cameraRise+=((menu?0:altitude)-this.cameraRise)*(1-Math.exp(-5.5*dt));
     this.cameraX+=((menu?0:state.x*cameraFollow)-this.cameraX)*(1-Math.exp(-11*dt));
-    this.cameraDepth=menu?0:closeCamera?2.46:.56;
+    this.cameraDepth=menu?0:closeCamera?2.90:.56;
     this.cx = w*(.5+cameraShift) + drift;
     const lift=garden?Math.min(1,Math.max(0,(state.playerY-3.3)/2.85)):0;
-    this.eye=(closeCamera?3.87:5.65)+this.cameraRise*2.70+lift*2.85;
+    this.eye=(closeCamera?3.72:5.65)+this.cameraRise*2.70+lift*2.85;
     this.fy=h*(1.10-this.cameraRise*.23-lift*.105);
     // The closer camera widens the foreground, so keep the outer rails inside the portrait frame.
     const trackWidth=closeCamera?1.42:portraitRun?1.55:1.25;
