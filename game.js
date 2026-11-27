@@ -102,7 +102,7 @@
   ];
   const ui = Object.fromEntries([
     "overlay","headline","description","eyebrow","primary","primary-label","secondary","results",
-    "main-menu","menu-play","menu-story","menu-ost","menu-settings",
+    "main-menu","menu-play","menu-story","menu-collection","collection","menu-ost","menu-settings",
     "story","warning","warning-continue","ost","ost-tracks","ost-sound","settings","settings-guide","settings-sound",
     "difficulty","difficulty-easy","difficulty-hard",
     "runner-pause","runner-guide","runner-controls","pause-resume","pause-restart","pause-menu",
@@ -156,8 +156,17 @@
   let selectedVehicle = null;
   let inspectedVehicle = escapeVehicles.at(-1);
   const previewOnly = new URLSearchParams(location.search).get("preview") === "trucks";
-  // The stored record stays in units of 5,000 ₽ for existing saves.
-  let best = Math.round(readLocal("best",0)*noteValue*100);
+  const progress = new WeddingProgress({
+    readLocal,writeLocal,recordUnit:noteValue*100,
+    onChange:() => {
+      collection.refresh();
+      if (mode==="lost") ui["result-best"].textContent = formatCapital(progress.best);
+    }
+  });
+  const collection = WeddingGallery.display(ui.collection,progress);
+  let runReward = null;
+  const paintingExposure = new Map();
+  let previousPaintingFrame = -Infinity;
   let unlocked = readLocal("garden",false);
   let lane = 0;
   let x = 0;
@@ -385,18 +394,44 @@
 
   function makePaintings() {
     const firstSide = Math.random()<.5 ? -1 : 1;
-    return WeddingScene.pickPhotos(Math.ceil(hallEnd/paintingInterval)-1).map((image,i)=>({
-      side:firstSide*(i%2 ? -1 : 1),image,position:routeMotion.distance((i+1)*paintingInterval)+21.5
+    return WeddingGallery.spawnAt(Math.ceil(hallEnd/paintingInterval)-1,index=>({
+      side:firstSide*(index%2 ? -1 : 1),position:routeMotion.distance((index+1)*paintingInterval)+21.5
     }));
   }
 
   function makeAirships() {
-    const interval = (highwayStart-hallEnd)/4;
+    const count = 4;
+    const interval = (highwayStart-hallEnd)/count;
     const firstSide = Math.random()<.5 ? -1 : 1;
-    return WeddingScene.pickPhotos(4).map((image,style)=>{
+    return WeddingGallery.spawnAt(count,style=>{
       const start = hallEnd+1.4+style*interval;
-      return {image,style,start,end:start+interval-1.8,side:firstSide*(style%2 ? -1 : 1)};
-    });
+      return {style,start,end:start+interval-1.8,side:firstSide*(style%2 ? -1 : 1)};
+    },{always:true});
+  }
+
+  function countVisiblePaintings(now) {
+    const elapsed = now-previousPaintingFrame;
+    previousPaintingFrame = now;
+    const visible = scene.visiblePaintings;
+    for (const id of paintingExposure.keys()) {
+      if (!visible.has(id) || elapsed>250) paintingExposure.delete(id);
+    }
+    const newlySeen = [];
+    for (const id of visible) {
+      if (progress.opened.has(id)) continue;
+      const held = paintingExposure.has(id) ? paintingExposure.get(id)+elapsed : 0;
+      if (held>=120) {
+        newlySeen.push(id);
+        paintingExposure.delete(id);
+      } else {
+        paintingExposure.set(id,held);
+      }
+    }
+    if (newlySeen.length) progress.update({paintings:newlySeen});
+  }
+
+  function connectTelegramProgress() {
+    progress.connect(window.Telegram?.WebApp);
   }
 
   function syncTelegramSwipes() {
@@ -472,7 +507,7 @@
     if (next === "lost") {
       ui["result-money"].textContent = formatCapital(runEarningsKopecks);
       ui["result-distance"].textContent = number.format(Math.floor(distance-routeMotion.distance(startTime))) + " м";
-      ui["result-best"].textContent = formatCapital(best);
+      ui["result-best"].textContent = formatCapital(progress.best);
     }
   }
 
@@ -775,6 +810,7 @@
 
   function reset(fromGarden) {
     clearPortal();
+    runReward = null;
     capitalKopecks = 0;
     runEarningsKopecks = 0;
     shield = false;
@@ -784,7 +820,7 @@
     placeOnRoute(fromGarden ? hallEnd : 0);
     gardenFlightGaps = findGardenFlightGaps(simulation);
     guests = makeGuests(startTime);
-    paintings = fromGarden ? [] : makePaintings();
+    paintings = makePaintings();
     airships = makeAirships();
   }
 
@@ -872,8 +908,7 @@
       if (entity.shielded) entity.shielded = false;
     }
     placeOnRoute(time);
-    if (!garden && !paintings.length) {
-      paintings = makePaintings();
+    if (!garden && !guests.some(guest=>!guest.garden)) {
       guests = [...makeGuests(0).filter(guest => !guest.garden),...guests];
     }
     audio.currentTime = time;
@@ -1097,8 +1132,7 @@
   function finish(won, reason = "") {
     if (mode !== "playing") return;
     pauseMusic();
-    best = Math.max(runEarningsKopecks,best);
-    writeLocal("best",best/(noteValue*100));
+    progress.update({best:runEarningsKopecks});
     if (won) {
       enterParking();
     } else {
@@ -1543,6 +1577,7 @@
     playDormTrombone,
     fadeMusic:level=>mixMusic(0,0,.74*level),
     debit:amount=>changeCapital(-amount),
+    reward:() => (runReward ??= progress.developerReward()),
     restart:async ()=>{
       driveFade.classList.add("black","instant");
       campus.root.hidden = true;
@@ -1703,6 +1738,10 @@
     ui.difficulty.showModal();
   }
   ui["menu-play"].addEventListener("click",openWarning);
+  ui["menu-collection"].addEventListener("click",() => {
+    collection.open();
+    progress.synchronize();
+  });
   ui["menu-story"].addEventListener("click",() => ui.story.showModal());
   ui.story.addEventListener("close",() => { ui.story.querySelector(".story-scroll").scrollTop = 0; });
   ui["warning-continue"].addEventListener("click",() => {
@@ -1882,6 +1921,10 @@
   function frame(now) {
     const dt = previousFrame ? Math.min(.25,(now-previousFrame)/1000) : 0;
     previousFrame = now;
+    scene.visiblePaintings.clear();
+    scene.watchPaintings = !document.hidden &&
+      ((mode==="playing" && !portal && !returnFade) || (mode==="driving" && drive.phase==="driving"));
+    if (!scene.watchPaintings) paintingExposure.clear();
     if (mode === "menu") {
       scene.sampleDisplayInterval(dt);
       requestAnimationFrame(frame);
@@ -1889,6 +1932,7 @@
     }
     if (mode === "driving") {
       drive.frame(now);
+      if (scene.watchPaintings && drive.phase==="driving") countVisiblePaintings(now);
       requestAnimationFrame(frame);
       return;
     }
@@ -1950,6 +1994,7 @@
       yardAhead:garden ? Math.max(0,routeMotion.distance(trackDuration)-distance) : Infinity,
       visible:visibleEntities()
     }, now/1000);
+    if (scene.watchPaintings && mode==="playing" && !portal) countVisiblePaintings(now);
     showSpeech(ui["guest-speech"],speeches?.guest);
     showSpeech(ui["bride-speech"],speeches?.bride);
     requestAnimationFrame(frame);
@@ -1959,7 +2004,11 @@
     updateRoute();
     if (mode === "playing" || mode === "paused") updateHud();
   });
-  byId("telegram-web-app")?.addEventListener("load",syncTelegramSwipes,{once:true});
+  byId("telegram-web-app")?.addEventListener("load",() => {
+    syncTelegramSwipes();
+    connectTelegramProgress();
+  },{once:true});
+  connectTelegramProgress();
   updateSound();
   if (previewOnly) {
     garden = true;

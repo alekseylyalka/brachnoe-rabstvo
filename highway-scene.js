@@ -175,7 +175,7 @@ window.WeddingHighway = class WeddingHighway {
     const depth = p.depth(y+height/2,z);
     const visibility = p.distanceVisibility(z,380,WeddingHighway.bannerReach);
     if (depth<3 || !visibility) return;
-    const photo = p.photos[image];
+    const photo = p.photos.get(image);
     if (!photo) return;
     const width = Math.max(6.0,Math.min(12.3,height*photo.width/photo.height));
     const screen = (dx,dy)=>p.project(x+dx,y+dy,z-side*dx*.28);
@@ -198,6 +198,7 @@ window.WeddingHighway = class WeddingHighway {
     const scale = Math.min(width/photo.width,height/photo.height);
     const picture = rectangle(photo.width*scale,photo.height*scale);
     p.sticker(picture,{image:photo,start:0,width:photo.width});
+    if (p.watchPaintings) p.observePainting(image,picture);
     p.poly(picture,"#20325224");
     for (const offset of [-width*.32,width*.32]) {
       const [px,py] = screen(offset,height/2+.17);

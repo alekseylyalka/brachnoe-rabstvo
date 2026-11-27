@@ -18,7 +18,7 @@ window.WeddingCampusQuiz = class WeddingCampusQuiz {
   static finalQuestion = ["РЕАЛЬНО ЛИ ДИМАС ЖЕНИТСЯ НА ТОЛСТУХЕ?","ДА","НЕТ"];
   static scoreFormat = new Intl.NumberFormat("ru-RU");
 
-  constructor({root,ending,painter,capital,debit,formatMoney,playDebit,playDormTrombone,fadeMusic,restart,mainMenu}) {
+  constructor({root,ending,painter,capital,debit,formatMoney,playDebit,playDormTrombone,fadeMusic,reward,restart,mainMenu}) {
     this.root = root;
     this.ending = ending;
     this.painter = painter;
@@ -28,6 +28,7 @@ window.WeddingCampusQuiz = class WeddingCampusQuiz {
     this.playDebit = playDebit;
     this.playDormTrombone = playDormTrombone;
     this.fadeMusic = fadeMusic;
+    this.reward = reward;
     this.restart = restart;
     this.mainMenu = mainMenu;
     this.ui = Object.fromEntries([...root.querySelectorAll("[data-campus]")].map(el=>[el.dataset.campus,el]));
@@ -68,6 +69,8 @@ window.WeddingCampusQuiz = class WeddingCampusQuiz {
     const {location,dormChoices,dormEnding,dormResult,scoreCard,badEnding,finish,spend,keep} = this.ui;
     location.textContent = "ГАУМАНКА";
     dormChoices.hidden = dormEnding.hidden = dormResult.hidden = scoreCard.hidden = badEnding.hidden = finish.hidden = true;
+    this.ui.paintingReward.hidden = true;
+    this.ui.paintingImage.removeAttribute("src");
     spend.disabled = keep.disabled = false;
     delete dormChoices.dataset.choice;
     dormEnding.style.removeProperty("--dorm-shade");
@@ -369,12 +372,23 @@ window.WeddingCampusQuiz = class WeddingCampusQuiz {
     if (shade===1) ui.dormChoices.hidden = true;
     if (t<2.90) return;
     this.setPhase("dorm-complete");
-    ui.dormResult.hidden = ui.finish.hidden = false;
+    ui.dormResult.hidden = false;
     if (spend) {
+      ui.score.textContent = WeddingCampusQuiz.scoreFormat.format(Math.floor(this.dorm.capital/(WeddingCampusDorm.rate*100)));
       ui.exchange.textContent = `${this.formatMoney(this.dorm.capital)} по ${this.formatMoney(WeddingCampusDorm.rate*100)}`;
-      ui.finish.focus({preventScroll:true});
+      const completed = this.dorm;
+      this.reward().then(id => {
+        if (this.dorm!==completed || this.phase!=="dorm-complete") return;
+        if (id) {
+          ui.paintingName.textContent = WeddingGallery.describe(id);
+          ui.paintingImage.src = WeddingGallery.source(id);
+          ui.paintingReward.hidden = false;
+        }
+        ui.finish.hidden = false;
+        if (this.root.contains(document.activeElement)) ui.finish.focus({preventScroll:true});
+      });
     } else {
-      ui.badEnding.hidden = false;
+      ui.badEnding.hidden = ui.finish.hidden = false;
       ui.badEnding.focus({preventScroll:true});
     }
   }

@@ -6,18 +6,20 @@
   <meta name="theme-color" content="#2b1218">
   <meta name="description" content="Браузерный раннер. Пробегите из свадебного зала в сад под свадебный трек.">
   <title>БРАЧНОЕ РАБСТВО</title>
-  <link rel="stylesheet" href="style.css?v=difficulty">
+  <link rel="stylesheet" href="style.css?v=collection">
   <script id="telegram-web-app" src="https://telegram.org/js/telegram-web-app.js?65" async></script>
   <script src="models.js?v=wedding-limo" defer></script>
-  <script src="scene.js?v=garden-chase" defer></script>
+  <script src="gallery.js?v=airship-posters" defer></script>
+  <script src="progress.js?v=collection" defer></script>
+  <script src="scene.js?v=collection" defer></script>
   <script src="highway-depth.js?v=campus-decor" defer></script>
   <script src="highway-campus.js?v=campus-light" defer></script>
-  <script src="highway-scene.js?v=sky-course" defer></script>
-  <script src="highway.js?v=difficulty" defer></script>
+  <script src="highway-scene.js?v=collection" defer></script>
+  <script src="highway.js?v=collection" defer></script>
   <script src="campus-dorm.js?v=seven-questions" defer></script>
   <script src="campus-interior.js?v=seven-questions" defer></script>
-  <script src="campus-quiz.js?v=seven-questions" defer></script>
-  <script src="game.js?v=difficulty" defer></script>
+  <script src="campus-quiz.js?v=collection" defer></script>
+  <script src="game.js?v=airship-posters" defer></script>
 </head>
 <body>
   <main class="shell">
@@ -71,6 +73,7 @@
         <div class="menu-actions">
           <button id="menu-play" class="primary wedding-primary" type="button" aria-haspopup="dialog">ИГРАТЬ</button>
           <button id="menu-story" class="secondary wedding-secondary" type="button" aria-haspopup="dialog">ПРЕДЫСТОРИЯ</button>
+          <button id="menu-collection" class="secondary wedding-secondary" type="button" aria-haspopup="dialog">КОЛЛЕКЦИЯ КАРТИН</button>
           <div class="menu-extras">
             <button id="menu-ost" class="secondary wedding-secondary" type="button" aria-haspopup="dialog">OST (МУЗЫКА ИЗ ИГРЫ)</button>
             <button id="menu-settings" class="secondary wedding-secondary" type="button" aria-haspopup="dialog">НАСТРОЙКИ</button>
@@ -290,6 +293,13 @@
               <p class="dorm-exchange" data-campus="exchange"></p>
             </div>
             <h2 class="dorm-bad-ending" data-campus="badEnding" tabindex="-1" hidden>ПРИДЕТСЯ ЖЕНИТЬСЯ <span>(ПЛОХАЯ КОНЦОВКА)</span></h2>
+            <figure class="dorm-painting" data-campus="paintingReward" hidden>
+              <img data-campus="paintingImage" alt="">
+              <figcaption>
+                <strong>Новая картина</strong>
+                <span data-campus="paintingName"></span>
+              </figcaption>
+            </figure>
             <button class="primary" data-campus="finish" type="button" hidden>В главное меню</button>
           </div>
         </div>
@@ -334,6 +344,19 @@
     </header>
     <div id="settings-guide"></div>
     <p class="wedding-credit">идея и реализация - @simga79 и @real_vampp</p>
+  </dialog>
+  <dialog id="collection" class="wedding-dialog wedding-panel" aria-labelledby="collection-title">
+    <header class="dialog-heading">
+      <div>
+        <h2 id="collection-title" class="wedding-heading">Коллекция картин</h2>
+        <p class="collection-total" aria-live="polite"></p>
+      </div>
+      <form method="dialog"><button class="icon-btn dialog-close" aria-label="Закрыть коллекцию" type="submit" autofocus>×</button></form>
+    </header>
+    <div class="collection-groups" role="group" aria-label="Группы картин"></div>
+    <div id="collection-grid" class="collection-scroll" role="region" tabindex="0">
+      <div class="collection-grid"></div>
+    </div>
   </dialog>
   <dialog id="warning" class="wedding-dialog wedding-panel" aria-labelledby="warning-title" aria-describedby="warning-text">
     <h2 id="warning-title" class="wedding-heading">ВАЖНО</h2>

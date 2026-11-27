@@ -16,7 +16,6 @@ window.WeddingScene = class WeddingScene {
   ];
   static archHalfWidth = 4.68;
   static archSpring = 3.44;
-  static paintingCount = 63;
   static hallWall = 7.6;
   static wallNear = -12;
   static roadTransitionLength = 30;
@@ -40,11 +39,6 @@ window.WeddingScene = class WeddingScene {
       deck:"#eab675", stripe:"#fff0bd", glass:"#91b7ca", rake:.10, grille:.61 }
   ];
 
-  static pickPhotos(count) {
-    const pool = Array.from({length:WeddingScene.paintingCount},(_,i)=>i);
-    return Array.from({length:count},()=>pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
-  }
-
   constructor(canvas) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d", { alpha: false });
@@ -55,10 +49,10 @@ window.WeddingScene = class WeddingScene {
     this.displayInterval = 1/60;
     this.refreshSamples = [];
     this.note = this.makeGlowingNote();
-    this.paintings = [];
-    this.photos = [];
-    this.paintingsReady = Promise.all(Array.from({length:WeddingScene.paintingCount},(_,index) =>
-      this.loadPainting(index)));
+    this.paintings = new Map();
+    this.photos = new Map();
+    this.visiblePaintings = new Set();
+    this.paintingsReady = Promise.all(WeddingGallery.mapPaintings.map((id,index) => this.loadPainting(id,index)));
     this.bouquets = Array.from({length:8},(_,i) => this.makeBouquet(i*19+3));
     this.gardenBouquets = Array.from({length:4},(_,i) => this.makeBouquet(i*19+3,true));
     this.hallFlowers = Array.from({length:3},(_,i) => this.makeHallFlowers(i));
@@ -461,15 +455,15 @@ window.WeddingScene = class WeddingScene {
     }
   }
 
-  async loadPainting(index) {
+  async loadPainting(id,index) {
     const image = new Image();
-    image.src = `assets/paintings/${String(index+1).padStart(2,"0")}.webp?v=album-63-v2`;
+    image.src = WeddingGallery.source(id);
     try {
       await image.decode();
     } catch {
       return;
     }
-    this.photos[index] = image;
+    this.photos.set(id,image);
     const scale = Math.min(1,464/Math.max(image.width,image.height));
     const pictureWidth = Math.round(image.width*scale);
     const pictureHeight = Math.round(image.height*scale);
@@ -518,12 +512,18 @@ window.WeddingScene = class WeddingScene {
       }
     }
     g.drawImage(image,border,border,pictureWidth,pictureHeight);
-    this.paintings[index] = frame;
+    this.paintings.set(id,{frame,border});
   }
 
-  hallPainting(z,side,index) {
-    const frame = this.paintings[index];
-    if (frame) this.wallArtwork(frame,z,side,5.40,3.35,12.8,true);
+  observePainting(id,points) {
+    if (this.watchPaintings && this.ctx.globalAlpha>=.55 && WeddingGallery.recognizable(points,this.w,this.h)) {
+      this.visiblePaintings.add(id);
+    }
+  }
+
+  hallPainting(z,side,id) {
+    const painting = this.paintings.get(id);
+    if (painting) this.wallArtwork(painting.frame,z,side,5.40,3.35,12.8,{id,border:painting.border});
   }
 
   gardenAirship(flights,time,dusk) {
@@ -537,7 +537,7 @@ window.WeddingScene = class WeddingScene {
     const span = 43+w*this.depth(altitude,177)/(2*this.fx);
     const [x,projectedY] = this.project(span*pass.side*(2*progress-1),altitude,z);
     const [light,mid,shadow] = WeddingScene.airshipColors[pass.style];
-    const image = this.photos[pass.image];
+    const image = this.photos.get(pass.image);
     const hull = WeddingScene.airshipHull;
     const scale = Math.min(1.48,w*.00175,h*.00225,this.fx*.23/this.depth(altitude,z));
     // Leave room for the whole suspended poster above the tops of the garden arches.
@@ -586,11 +586,11 @@ window.WeddingScene = class WeddingScene {
     g.stroke(hull);
     g.restore();
 
-    if (image) this.airshipPoster(image,pass.side*Math.sin(wave*2.45+.4),verticalScale/scale);
+    if (image) this.airshipPoster(image,pass.side*Math.sin(wave*2.45+.4),verticalScale/scale,pass.image);
     g.restore();
   }
 
-  airshipPoster(image,sway,aspect) {
+  airshipPoster(image,sway,aspect,id) {
     const g = this.ctx;
     const ratio = Math.min(338/image.width,177/image.height);
     const width = image.width*ratio*aspect, height = image.height*ratio;
@@ -613,12 +613,20 @@ window.WeddingScene = class WeddingScene {
     g.closePath();
     g.fill();
     g.drawImage(image,-width/2,6,width,height);
+    if (this.watchPaintings) {
+      const transform = g.getTransform();
+      const picture = [[-width/2,6],[width/2,6],[width/2,6+height],[-width/2,6+height]];
+      this.observePainting(id,picture.map(([x,y]) => [
+        (transform.a*x+transform.c*y+transform.e)/this.dpr,
+        (transform.b*x+transform.d*y+transform.f)/this.dpr
+      ]));
+    }
     this.line([[-half-2,0],[half+2,0]],"#876544",3.6);
     for (const side of [-1,1]) this.ellipse(side*(half-4),0,2.5,2.5,"#f5cc85");
   }
 
-  wallArtwork(sprite,z,side,centerY,maxHeight,maxLength,framed=false) {
-    const opacity = this.distanceVisibility(z,framed?54:42,framed?82:65);
+  wallArtwork(sprite,z,side,centerY,maxHeight,maxLength,painting=null) {
+    const opacity = this.distanceVisibility(z,painting?54:42,painting?82:65);
     if (!opacity) return;
     // Set the proportions for the point where a wall piece fills the side of the view.
     const squeeze = Math.max(1,this.h*.88/this.w);
@@ -644,7 +652,7 @@ window.WeddingScene = class WeddingScene {
     const g = this.ctx;
     g.save();
     g.globalAlpha *= opacity;
-    if (framed) {
+    if (painting) {
       this.face(corners.map(([,y,depth])=>[side*wall,y-.075,depth-.09]),"#33252662");
       if (!cut) {
         const edge = side>0 ? 1 : 0;
@@ -688,6 +696,17 @@ window.WeddingScene = class WeddingScene {
       }
       ax=bx; ay=by;
       cx=dx; cy=dy;
+    }
+    if (painting && this.watchPaintings) {
+      // Project the artwork inside the wooden frame using the same wall plane as the texture.
+      const inset = painting.border/sprite.width;
+      const topImage = top-height*painting.border/sprite.height;
+      const bottomImage = bottom+height*painting.border/sprite.height;
+      const picture = [point(inset,topImage),point(1-inset,topImage),
+        point(1-inset,bottomImage),point(inset,bottomImage)];
+      if (picture.every(([,y,depth])=>this.depth(y,depth)>.7)) {
+        this.observePainting(painting.id,picture.map(corner=>this.project(...corner)));
+      }
     }
     g.restore();
   }

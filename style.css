@@ -592,6 +592,14 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
 .dorm-bad-ending { outline: none; animation: campus-dim .42s ease-out both }
 .dorm-bad-ending span { display: block; margin-top: .75em; color: #ffa9bd; font: 850 .46em/1.12 system-ui,sans-serif }
 .dorm-result .primary { margin: 20px auto 0 }
+.dorm-painting {
+  display: flex; align-items: center; gap: 12px; width: fit-content; max-width: 100%; margin: 14px auto 0;
+  padding: 8px 14px 8px 8px; border: 1px solid #d69a618a; border-radius: 9px;
+  background: #4a222a; text-align: left;
+}
+.dorm-painting img { width: 88px; height: min(80px,20dvh); object-fit: contain; background: #26121a; border-radius: 4px }
+.dorm-painting figcaption { display: grid; gap: 5px; font-size: .8125rem; color: var(--wedding-muted) }
+.dorm-painting strong { color: var(--wedding-title); font-size: 1rem }
 @keyframes campus-dim { from { opacity: 0 } to { opacity: 1 } }
 @media (max-width: 590px) {
   .dorm-choices { display: grid; width: min(370px,calc(100% - 22px)); bottom: max(10px,env(safe-area-inset-bottom)); gap: 6px }
@@ -729,6 +737,65 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
 .story-scroll { min-height: 0; overflow-y: auto; padding: 0 8px 4px 2px; overscroll-behavior: contain }
 .story-scroll:focus-visible { outline: 2px solid #ffe9bf; outline-offset: -2px; border-radius: 4px }
 .story-scroll p { margin: 0 0 1em; font-size: 1rem; line-height: 1.6 }
+#collection[open] {
+  width: min(600px,100%);
+  max-height: min(790px,calc(100dvh - 30px));
+  padding: clamp(13px,4vw,24px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#collection-title { font-size: clamp(24px,7.2vw,42px) }
+.collection-total { margin: 6px 0 0; color: var(--wedding-muted); font-size: .875rem }
+.collection-groups {
+  display: grid;
+  grid-template-columns: repeat(2,minmax(0,1fr));
+  gap: 6px;
+}
+[data-rarity=common] { --rarity-color: #edc3a1 }
+[data-rarity=rare] { --rarity-color: #9bcef5 }
+[data-rarity=epic] { --rarity-color: #e0b2f3 }
+[data-rarity=legendary] { --rarity-color: #ffd579 }
+[data-rarity=developers] { --rarity-color: #ffb6c6 }
+.collection-groups button {
+  display: flex; justify-content: space-between; align-items: center; gap: 3px;
+  min-width: 0; min-height: 39px; padding: 4px 8px;
+  font: 700 .8125rem/1.15 system-ui,sans-serif; color: var(--rarity-color);
+}
+.collection-groups button[aria-pressed=true] {
+  border-color: var(--rarity-color); background: #5e3037; box-shadow: inset 0 -2px 0 #d39a6955;
+}
+.collection-groups button:last-child { grid-column: 1/-1 }
+.collection-groups strong { font-variant-numeric: tabular-nums }
+.collection-scroll {
+  min-height: 0; overflow: auto; overscroll-behavior: contain;
+  scrollbar-width: thin; scrollbar-color: #a5735f transparent;
+}
+.collection-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 7px }
+.collection-card {
+  position: relative; display: grid; place-items: center; overflow: hidden; aspect-ratio: 4/5;
+  border: 1px solid var(--rarity-color); border-radius: 6px; background: #1e1019;
+}
+.collection-card img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain }
+.collection-card.locked {
+  background: radial-gradient(ellipse at top,#512831,#2e1822 85%);
+  border-color: #906654;
+  box-shadow: inset 0 0 0 3px #1c0d1580,inset 0 0 0 4px #bc856544;
+}
+.collection-lock { position: relative; width: 17px; height: 14px; margin-top: 5px; border-radius: 3px; background: #bb896e }
+.collection-lock::before {
+  content: ""; position: absolute; inset: -8px 3px 10px; border: 2px solid #bb896e; border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+}
+.collection-lock::after {
+  content: ""; position: absolute; left: 7px; top: 4px; width: 3px; height: 6px; border-radius: 2px; background: #4a2930;
+}
+@media (min-width: 550px) {
+  .collection-grid { grid-template-columns: repeat(4,minmax(0,1fr)) }
+}
+@media (max-width: 340px) {
+  .collection-groups button { font-size: .75rem }
+}
 #warning[open], #difficulty[open] {
   width: min(420px, 100%);
   height: fit-content;

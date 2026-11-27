@@ -122,8 +122,8 @@ window.WeddingDrive = class WeddingDrive {
       chase:{x:WeddingHighway.laneX(WeddingDrive.chaseStartLane),lane:WeddingDrive.chaseStartLane,
         meters:0,previous:0,z:0,lean:0,speed:cruise,extraSpeed:extraChaseKmh/3.6,visible:false,turn:null},
       traffic:[], nextCar:47, carsSpawned:0,
-      banners:WeddingScene.pickPhotos(WeddingDrive.bannerCount).map((image,index)=>({
-        image,side:index%2 ? 1 : -1,meters:finishMeters*(index+.5)/WeddingDrive.bannerCount
+      banners:WeddingGallery.spawnAt(WeddingDrive.bannerCount,index=>({
+        side:index%2 ? 1 : -1,meters:finishMeters*(index+.5)/WeddingDrive.bannerCount
       })),
       signs:WeddingDrive.stops.map(({name,at})=>({name,at,meters:at===0 ? 38 : at*finishMeters}))
     };
