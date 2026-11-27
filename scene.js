@@ -7,7 +7,7 @@ window.WeddingScene = class WeddingScene {
     {pixelRatio:1.40, sceneryDistance:154, hallPixelRatio:1.25, hallDistance:124, hallDetail:.82},
     {pixelRatio:1, sceneryDistance:112, hallPixelRatio:.90, hallDistance:94, hallDetail:.67, reducedDetail:true}
   ];
-  static portraitRenderSettings = [
+  static mobileRenderSettings = [
     {...this.renderSettings[0], pixelRatio:3, hallPixelRatio:3},
     {...this.renderSettings[1], pixelRatio:1.85, hallPixelRatio:1.85},
     {...this.renderSettings[2], pixelRatio:1.85, hallPixelRatio:1.85},
@@ -26,6 +26,7 @@ window.WeddingScene = class WeddingScene {
   static airshipHull = new Path2D("M -171 0 C -162 -22 -120 -49 -52 -55 C 42 -64 135 -44 163 -14 C 194 21 126 56 45 59 C -38 63 -131 35 -171 0 Z");
   // The character meshes have different unscaled heights.
   static brideScale = [1.02*1.8,2.107/1.884,1.02];
+  static mobileBrideScale = [1.60,2.107/1.884,1.02];
   static archCurve = Array.from({length:19},(_,i) =>
     [Math.cos(i*Math.PI/18),Math.sin(i*Math.PI/18)]);
   static truckStyles = [
@@ -103,13 +104,16 @@ window.WeddingScene = class WeddingScene {
     const { width, height } = this.canvas.getBoundingClientRect();
     this.w = Math.max(1, width);
     this.h = Math.max(1, height);
-    this.portrait = this.w<=600 && this.h>this.w;
-    const bottomInset = this.portrait ? getComputedStyle(this.canvas).getPropertyValue("--runner-bottom-inset") : "";
-    this.safeBottom = parseFloat(bottomInset) || 0;
-    const mobileResolution = this.h>this.w && (this.portrait || matchMedia("(any-pointer: coarse)").matches);
+    const mobileResolution = document.documentElement.classList.contains("mobile-game");
+    if (mobileResolution) {
+      const deviceInset = getComputedStyle(this.canvas).getPropertyValue("--browser-safe-bottom");
+      const telegram = window.Telegram?.WebApp;
+      this.safeBottom = Math.max(parseFloat(deviceInset) || 0, telegram?.safeAreaInset?.bottom ?? 0) +
+        (telegram?.contentSafeAreaInset?.bottom ?? 0);
+    }
     if (this.mobileResolution!==mobileResolution) {
       this.mobileResolution = mobileResolution;
-      this.qualityLevels = mobileResolution ? WeddingScene.portraitRenderSettings : WeddingScene.renderSettings;
+      this.qualityLevels = mobileResolution ? WeddingScene.mobileRenderSettings : WeddingScene.renderSettings;
       this.renderQuality = mobileResolution ? 1 : 0;
       this.resetPerformanceWindow();
     }
@@ -2596,7 +2600,8 @@ window.WeddingScene = class WeddingScene {
     const runner=type==="runner";
     const kuzy=type==="kuzy";
     const bride=type==="bride";
-    const modelScale=bride?WeddingScene.brideScale:runner?1:1.02;
+    const brideScale = this.mobileResolution && !menu ? WeddingScene.mobileBrideScale : WeddingScene.brideScale;
+    const modelScale=bride?brideScale:runner?1:1.02;
     this.ellipse(px,py,scale*(runner?.37:bride?.68*1.8:.68),scale*.125,"#33281980");
     if (runner && !menu && state.flying) {
       for (let i=0;i<17;i++) {
@@ -2664,13 +2669,13 @@ window.WeddingScene = class WeddingScene {
     g.globalAlpha=1;
   }
 
-  framePortraitBride(x,z,retreat) {
-    const margin=Math.max(8,this.w*.025);
+  frameMobileBride(x,z,retreat) {
+    const margin=Math.max(8,Math.min(24,this.h*.033));
     // The dress hem is the closest part of the animated model to the bottom edge.
     const hemY=-.11;
     const hemZ=-.68;
     const bottom=this.h-margin-this.safeBottom-retreat;
-    const minDepth=(this.eye-hemY)*this.fy/(bottom-this.horizon);
+    const minDepth=(this.eye-hemY)*this.fy/Math.max(1,bottom-this.horizon);
     z=Math.max(z,minDepth-this.depth(hemY,hemZ));
 
     const skirtHalfWidth=1.49;
@@ -3037,27 +3042,27 @@ window.WeddingScene = class WeddingScene {
     this.wasPlaying = playing;
     g.setTransform(this.dpr,0,0,this.dpr,0,0);
     const compactMenu = menu && w<=740;
-    const portraitRun = !menu && this.portrait;
-    const closeCamera = portraitRun && !state.heaven;
+    const mobileRun = this.mobileResolution && !menu && !state.heaven;
     const cameraShift = menu && !compactMenu ? .17 : 0;
     const drift = state.shake > 0 ? Math.sin(elapsed*60)*Math.min(4,state.shake*18) : 0;
     const dt=Math.min(.06,Math.max(.001,intervalSinceDraw));
     this.previousFrame=elapsed;
     const altitude=state.flying?1:Math.min(.68,state.groundY*.26+Math.max(0,state.playerY-state.groundY)*.055);
     const lineupFraming=garden ? Math.max(0,Math.min(1,1-state.yardAhead/55)) : 0;
-    const cameraFollow=(portraitRun?.22:.46)*(1-lineupFraming)+.12*lineupFraming;
+    const cameraFollow=(mobileRun?.25:.46)*(1-lineupFraming)+.12*lineupFraming;
     this.cameraRise+=((menu?0:altitude)-this.cameraRise)*(1-Math.exp(-5.5*dt));
     this.cameraX+=((menu?0:state.x*cameraFollow)-this.cameraX)*(1-Math.exp(-11*dt));
-    this.cameraDepth=menu?0:closeCamera?2.08:.56;
+    this.cameraDepth=menu?0:mobileRun?.18:.56;
     this.cx = w*(.5+cameraShift) + drift;
     const lift=garden?Math.min(1,Math.max(0,(state.playerY-3.3)/2.85)):0;
-    this.eye=(closeCamera?4:5.65)+this.cameraRise*2.70+lift*2.85;
+    this.eye=(mobileRun?4.75:5.65)+this.cameraRise*2.70+lift*2.85;
     this.fy=h*(1.10-this.cameraRise*.23-lift*.105);
-    // The closer camera widens the foreground, so keep the outer rails inside the portrait frame.
-    const trackWidth=closeCamera?1.42:portraitRun?1.55:1.25;
-    this.fx=Math.min(this.fy,w*(trackWidth*(1-lineupFraming)+.99*lineupFraming));
-    const runnerHorizon=portraitRun?Math.max(h*.25,Math.min(156,h*.306)):h*.306;
-    this.horizon=(menu?h*(compactMenu?.25:.284):runnerHorizon)-h*(this.cameraRise*.046+lift*.065+(closeCamera?.025:0));
+    // Spread the lanes across the wider screen while keeping vertical clearance ahead of the bride.
+    const horizontalScale=mobileRun?1.29-.17*lineupFraming:1;
+    const trackWidth=mobileRun?.90:1.25;
+    this.fx=Math.min(this.fy*horizontalScale,w*(trackWidth*(1-lineupFraming)+.99*lineupFraming));
+    const horizon=menu?(compactMenu?.25:.284):mobileRun?.235:.306;
+    this.horizon=h*(horizon-this.cameraRise*.046-lift*.065);
     const distance = state.distance;
     const anim = menu ? elapsed*.31 : state.t;
     if (state.heaven) return this.drawHeaven(state,anim);
@@ -3182,11 +3187,11 @@ window.WeddingScene = class WeddingScene {
     const characterX=compactMenu?2.65:state.x;
     const brideX=compactMenu?2.65:state.brideX;
     const side=characterX>1 ? -1 : 1;
-    const separation=Math.max(0,1.75-Math.abs(characterX-brideX));
+    const separation=Math.max(0,(mobileRun?2.30:1.75)-Math.abs(characterX-brideX));
     const offset=(Math.sign(brideX-characterX) || side)*separation;
     this.brideOffset+=(offset-this.brideOffset)*(1-Math.exp(-12*dt));
-    const retreat=h*(closeCamera?.09:.32)*state.brideRetreat;
-    const bride=closeCamera ? this.framePortraitBride(brideX+this.brideOffset,brideZ,retreat) :
+    const retreat=h*(mobileRun?.16:.32)*state.brideRetreat;
+    const bride=mobileRun ? this.frameMobileBride(brideX+this.brideOffset,brideZ,retreat) :
       {x:brideX+this.brideOffset,z:brideZ};
     props.push({ z:playerZ, character:"runner" });
     if (state.brideRetreat < 1 && this.depth(2,bride.z)>.65) props.push({ z:bride.z, character:"bride" });
@@ -3252,7 +3257,7 @@ window.WeddingScene = class WeddingScene {
         const x=bride.x;
         g.save();
         g.translate(0,retreat);
-        if (closeCamera) g.globalAlpha*=Math.min(1,(1-state.brideRetreat)*2);
+        if (mobileRun) g.globalAlpha*=Math.min(1,(1-state.brideRetreat)*2);
         this.character("bride",x,0,z,0,state,anim,menu);
         g.restore();
         if (state.brideLine) {

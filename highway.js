@@ -35,7 +35,7 @@ window.WeddingDrive = class WeddingDrive {
     return p*p*(3-2*p);
   }
 
-  constructor({scene,track,root,fade,caught,onEnter,onExit,onMute,onCaught,onCampus,onMainMenu,canTeleport}) {
+  constructor({scene,track,root,fade,caught,onEnter,onExit,onMute,onCaught,onCampus,onMainMenu,canTeleport,isSuspended=()=>document.hidden}) {
     this.scene = new WeddingHighway(scene);
     this.track = track;
     this.root = root;
@@ -45,6 +45,7 @@ window.WeddingDrive = class WeddingDrive {
     this.onExit = onExit;
     this.onCaught = onCaught;
     this.onCampus = onCampus;
+    this.isSuspended = isSuspended;
     this.phase = "idle";
     this.steering = new Set();
     this.throttleKeys = new Set();
@@ -140,7 +141,7 @@ window.WeddingDrive = class WeddingDrive {
     this.frame();
     this.fade.classList.remove("black");
     this.root.focus({preventScroll:true});
-    if (document.hidden) this.pause();
+    if (this.isSuspended()) this.pause();
     return true;
   }
 
@@ -242,7 +243,7 @@ window.WeddingDrive = class WeddingDrive {
     this.ui.resume.disabled = true;
     try {
       if (this.state.elapsed<this.duration) await this.track.play();
-      if (this.phase!=="paused" || document.hidden) {
+      if (this.phase!=="paused" || this.isSuspended()) {
         this.track.pause();
         return;
       }

@@ -6,18 +6,18 @@
   <meta name="theme-color" content="#2b1218">
   <meta name="description" content="Браузерный раннер. Пробегите из свадебного зала в сад под свадебный трек.">
   <title>БРАЧНОЕ РАБСТВО</title>
-  <link rel="stylesheet" href="style.css?v=portrait-hud">
+  <link rel="stylesheet" href="style.css?v=mobile-landscape">
   <script id="telegram-web-app" src="https://telegram.org/js/telegram-web-app.js?65" async></script>
   <script src="models.js?v=wedding-limo" defer></script>
-  <script src="scene.js?v=mobile-render-2" defer></script>
+  <script src="scene.js?v=mobile-landscape" defer></script>
   <script src="highway-depth.js?v=campus-decor" defer></script>
   <script src="highway-campus.js?v=campus-light" defer></script>
   <script src="highway-scene.js?v=sky-course" defer></script>
-  <script src="highway.js?v=ost-settings" defer></script>
+  <script src="highway.js?v=mobile-landscape" defer></script>
   <script src="campus-dorm.js?v=room-332" defer></script>
   <script src="campus-interior.js?v=room-332" defer></script>
   <script src="campus-quiz.js?v=run-rules" defer></script>
-  <script src="game.js?v=mobile-render-2" defer></script>
+  <script src="game.js?v=mobile-landscape" defer></script>
 </head>
 <body>
   <main class="shell">
@@ -334,6 +334,12 @@
     <h2 id="warning-title" class="wedding-heading">ВАЖНО</h2>
     <p id="warning-text">ИГРА СЮЖЕТНАЯ, В НЕЙ НЕСКОЛЬКО ИГРОВЫХ МЕХАНИК (НЕ ТОЛЬКО САБВЕЙ СЕРФЕРС) И КОНЦОВКА-СЮРПРИЗ</p>
     <button id="warning-continue" class="primary wedding-primary" type="button" autofocus>ПРОДОЛЖИТЬ</button>
+  </dialog>
+  <dialog id="landscape-required" class="landscape-required wedding-panel" aria-labelledby="landscape-title" aria-describedby="landscape-detail">
+    <span class="landscape-phone" aria-hidden="true"></span>
+    <h2 id="landscape-title" class="wedding-heading" tabindex="-1" autofocus>Поверните телефон</h2>
+    <p id="landscape-detail">Для игры нужен горизонтальный экран. Если телефон не реагирует на поворот, отключите блокировку ориентации.</p>
+    <button id="landscape-fullscreen" class="secondary wedding-secondary" type="button" hidden>На весь экран</button>
   </dialog>
   <audio id="menu-track" data-ost-title="Свадьба меню" src="assets/wedding-menu.mp3" preload="metadata" loop></audio>
   <audio id="track" data-ost-title="Свадебный" src="assets/wedding.mp3?v=heaven-2" preload="none"></audio>
