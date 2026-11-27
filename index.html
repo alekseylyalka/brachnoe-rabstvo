@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#2b1218">
   <meta name="description" content="Браузерный раннер. Пробегите из свадебного зала в сад под свадебный трек.">
   <title>БРАЧНОЕ РАБСТВО</title>
-  <link rel="stylesheet" href="style.css?v=wide-portrait">
+  <link rel="stylesheet" href="style.css?v=garden-chase">
   <script id="telegram-web-app" src="https://telegram.org/js/telegram-web-app.js?65" async></script>
   <script src="models.js?v=wedding-limo" defer></script>
-  <script src="scene.js?v=wide-portrait" defer></script>
+  <script src="scene.js?v=garden-chase" defer></script>
   <script src="highway-depth.js?v=campus-decor" defer></script>
   <script src="highway-campus.js?v=campus-light" defer></script>
   <script src="highway-scene.js?v=sky-course" defer></script>
@@ -17,7 +17,7 @@
   <script src="campus-dorm.js?v=room-332" defer></script>
   <script src="campus-interior.js?v=room-332" defer></script>
   <script src="campus-quiz.js?v=run-rules" defer></script>
-  <script src="game.js?v=wide-portrait" defer></script>
+  <script src="game.js?v=garden-chase" defer></script>
 </head>
 <body>
   <main class="shell">
@@ -47,12 +47,6 @@
         <button id="pause" class="icon-btn pause" type="button" aria-label="Пауза" title="Пауза (Esc)">Ⅱ</button>
         <button id="runner-sound" class="icon-btn runner-sound" type="button" aria-label="Выключить звук" title="Выключить звук" aria-pressed="false"><span class="sound-icon" aria-hidden="true">♪</span></button>
         <div class="timer"><div><span id="chapter-label">Свадебный зал</span><time id="clock">0:00 / 1:30</time></div><div class="progress"><i id="progress"></i></div></div>
-        <div id="heaven-hud" class="heaven-hud" hidden>
-          <div class="heaven-clock"><span>До возвращения</span><time id="heaven-clock">20 с</time></div>
-          <div class="progress"><i id="heaven-progress"></i></div>
-          <strong id="heaven-money" aria-label="Сосиски и стоимость"></strong>
-          <div id="heaven-boosts" class="heaven-boosts" role="group" aria-label="Бусты в Раю" hidden></div>
-        </div>
       </div>
       <div id="cloud-veil" class="cloud-veil" aria-hidden="true" hidden><i></i><i></i><i></i></div>
       <div id="heaven-fine" class="heaven-fine" role="status" hidden>

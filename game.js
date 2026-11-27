@@ -21,9 +21,11 @@
   const hallFlightHeight = 3.18;
   const gardenFlightHeight = 6.20;
   const chaseDistance = 2.84;
+  const portraitChaseOffset = .45;
   const brideRetreatDistance = 4;
-  const brideHalfWidth = .83;
-  const brideHalfDepth = .58;
+  // Include the flared skirt and the extra depth it sweeps while turning.
+  const brideHalfWidth = 1.43;
+  const brideHalfDepth = .69;
   const slideDuration = .75;
   const truckHalfWidth = 1.06;
   const sideHitWindow = 3;
@@ -95,8 +97,8 @@
     "runner-pause","runner-guide","runner-controls","pause-resume","pause-restart","pause-menu",
     "result-money","result-distance","result-best","hud","money","distance","boosts-live","clock","progress",
     "chapter-label","route-hall","route-garden","pause","toast","sound","runner-sound","help",
-    "guest-speech","bride-speech","route-heaven","route-main","heaven-hud","heaven-clock","heaven-progress",
-    "heaven-money","heaven-boosts","cloud-veil","heaven-fine","fine-count","fine-debit","fine-capital",
+    "guest-speech","bride-speech","route-heaven","route-main","cloud-veil","heaven-fine",
+    "fine-count","fine-debit","fine-capital",
     "parking-intro","parking-heading","parking-continue",
     "garage","garage-heading","garage-image","garage-name","garage-price","garage-capital","garage-options",
     "garage-buy","garage-status","garage-continue","garage-nitro","garage-speed","garage-sound",
@@ -105,26 +107,19 @@
   const iconSources = Object.fromEntries(Object.entries(WeddingModels.icons).map(([name,icon])=>[name,icon.toDataURL()]));
   ui["cloud-veil"].style.setProperty("--cloud-shape",`url(${scene.heavenCloud.toDataURL()})`);
   document.querySelectorAll("[data-boost-icon]").forEach(image => { image.src = iconSources[image.dataset.boostIcon]; });
-  function makeChips(container, names) {
-    return Object.fromEntries(names.map(name => {
-      const chip = document.createElement("div");
-      chip.className = "power-chip";
-      chip.title = boosts[name]?.label ?? multiplierLabel;
-      chip.hidden = true;
-      const icon = document.createElement(name === "multiplier" ? "b" : "img");
-      if (name === "multiplier") icon.className = "multiplier-mark";
-      else {
-        icon.src = iconSources[name] ?? "assets/" + name + ".webp";
-        icon.alt = boosts[name].label;
-      }
-      const value = document.createElement("span");
-      chip.append(icon,value);
-      container.append(chip);
-      return [name,{chip,icon,value}];
-    }));
-  }
-  const chips = makeChips(ui["boosts-live"],Object.keys(boosts));
-  const heavenChips = makeChips(ui["heaven-boosts"],["hood","boots","magnet","multiplier"]);
+  const chips = Object.fromEntries(Object.entries(boosts).map(([name,{label}]) => {
+    const chip = document.createElement("div");
+    chip.className = "power-chip";
+    chip.title = label;
+    chip.hidden = true;
+    const icon = document.createElement("img");
+    icon.src = iconSources[name] ?? "assets/" + name + ".webp";
+    icon.alt = label;
+    const value = document.createElement("span");
+    chip.append(icon,value);
+    ui["boosts-live"].append(chip);
+    return [name,{chip,value}];
+  }));
   const compactRunnerHud = matchMedia("(max-width: 600px) and (orientation: portrait)");
 
   let mode = "menu";
@@ -204,6 +199,7 @@
       return url;
     }).catch(() => null);
   const inHeaven = () => portal?.active === true;
+  const brideFollowDistance = () => chaseDistance+(scene.portrait && !inHeaven()?portraitChaseOffset:0);
   const isCash = kind => kind === "note" || kind === "roof" || kind === "air";
   const isVehicle = kind => kind === "truck" || kind === "police";
 
@@ -564,7 +560,6 @@
     const heaven = inHeaven();
     ui["route-main"].hidden = heaven;
     ui["route-heaven"].hidden = !heaven;
-    ui["heaven-hud"].hidden = !heaven;
     stage.classList.toggle("heaven",heaven);
     stage.classList.toggle("sunlit",garden);
     for (const [key, current] of [["hall",!garden],["garden",garden]]) {
@@ -722,14 +717,14 @@
     distance = speedCurve(t);
     lane = path;
     x = brideX = brideTarget = lane * laneWidth;
-    brideDistance = distance-chaseDistance;
+    chaseGap = brideFollowDistance();
+    brideDistance = distance-chaseGap;
     brideYield = 0;
     runnerShift = brideShift = null;
     laneChangeDistance = lastSideHit = -Infinity;
     sideRebound = null;
     playerY = groundY = velocityY = 0;
     brideAway = 0;
-    chaseGap = chaseDistance;
     grounded = true;
     poweredJump = false;
     gravity = 17.25;
@@ -1141,15 +1136,22 @@
   }
 
   function bridePathClear(fromX, toX, fromDistance, toDistance) {
-    const left = Math.min(fromX,toX)-brideHalfWidth;
-    const right = Math.max(fromX,toX)+brideHalfWidth;
-    const near = Math.min(fromDistance,toDistance)-brideHalfDepth;
-    const far = Math.max(fromDistance,toDistance)+brideHalfDepth;
-    for (let i=firstVisible;i<simulation.length;i++) {
+    const heaven = inHeaven();
+    const halfWidth = heaven ? .83 : brideHalfWidth;
+    const halfDepth = heaven ? .58 : brideHalfDepth;
+    const left = Math.min(fromX,toX)-halfWidth;
+    const right = Math.max(fromX,toX)+halfWidth;
+    const near = Math.min(fromDistance,toDistance)-halfDepth;
+    const far = Math.max(fromDistance,toDistance)+halfDepth;
+    // The bride may still be beside a truck after it has left the runner's view.
+    let first = firstVisible;
+    while (first > 0 && simulation[first-1].position+truckLength >= near) first--;
+    for (let i=first;i<simulation.length;i++) {
       const entity = simulation[i];
       if (entity.position > far+rampLength) break;
       const truck = isVehicle(entity.kind);
-      if (entity.used || (!truck && entity.kind!=="barrier" && entity.kind!=="ribbon")) continue;
+      if (entity.used || (!heaven && entity.t<=startTime) ||
+          (!truck && entity.kind!=="barrier" && entity.kind!=="ribbon")) continue;
       const width = truck ? (entity.halfWidth ?? 1.16) : .94;
       const center = entity.lane*laneWidth;
       const front = entity.position-(entity.ramp || .13);
@@ -1160,32 +1162,59 @@
   }
 
   function updateBride(dt, flying) {
-    const gapTarget = chaseDistance+Math.min(2.12,groundY*.90);
+    const gapTarget = brideFollowDistance()+Math.min(2.12,groundY*.90);
     chaseGap += (gapTarget-chaseGap)*(1-Math.exp(-9*dt));
     if (flying) brideAway = Math.min(1,brideAway+dt/.78);
     else if (grounded) brideAway = Math.max(0,brideAway-dt/.85);
 
     const pace = (inHeaven()?portal.initialSpeed:11.6)+acceleration*t;
-    const ahead = brideDistance+pace*.22;
+    const ahead = brideDistance+pace*laneShiftDuration;
     const blocked = !bridePathClear(brideX,brideX,brideDistance,ahead);
-    const crossing = brideX !== brideTarget;
-    const waiting = crossing && !bridePathClear(brideX,brideTarget,brideDistance,ahead);
     if (!brideShift) {
-      if (crossing && !waiting) {
-        brideShift = shift(brideX,brideTarget,laneShiftDuration);
-      } else if (blocked) {
-        // Clear the current lane before a solid obstacle, then resume the pursuit.
-        const alternative = [brideTarget,0,-laneWidth,laneWidth].find(target => target !== brideX &&
-          bridePathClear(brideX,target,brideDistance,brideDistance) &&
-          bridePathClear(target,target,brideDistance,ahead));
-        if (alternative !== undefined) brideShift = shift(brideX,alternative,laneShiftDuration);
+      // Leave the runner visible when there is room. This offset is part of the
+      // pursuit, so it has to clear traffic just like any other lane change.
+      const offset = !inHeaven() && scene.portrait ?
+        (brideTarget===0 ? .62 : -.96*Math.sign(brideTarget)) : 0;
+      const preferred = brideTarget+offset;
+      const targets = [preferred,brideTarget,brideX,0,-laneWidth,laneWidth];
+      const laneFrom = at => targets.find(target =>
+        (target!==brideX || !blocked) &&
+        bridePathClear(brideX,target,at,at) &&
+        bridePathClear(target,target,at,ahead));
+      let turnAt = brideDistance;
+      let target = laneFrom(turnAt);
+      if (target === undefined && blocked) {
+        // Staggered obstacles can leave a free lane just out of reach. Step
+        // back only when there is a clear way across and past the obstruction.
+        for (const setback of [.85,1.7,3.4,6.8]) {
+          const at = brideDistance-setback;
+          if (!bridePathClear(brideX,brideX,brideDistance,at)) break;
+          target = laneFrom(at);
+          if (target !== undefined) {
+            turnAt = at;
+            break;
+          }
+        }
+      }
+      if (target !== undefined && target !== brideX) {
+        brideShift = shift(brideX,target,laneShiftDuration*Math.max(.55,Math.abs(target-brideX)/laneWidth));
+        if (turnAt<brideDistance) brideShift.turnAt = turnAt;
       }
     }
 
-    const yieldGap = blocked || waiting ? 1.28 : 0;
+    const yieldGap = blocked ? 1.28 : 0;
     brideYield += (yieldGap-brideYield)*(1-Math.exp(-9*dt));
+    if (brideShift?.turnAt !== undefined && brideDistance>brideShift.turnAt) {
+      const next = Math.max(brideShift.turnAt,brideDistance-6*dt);
+      if (bridePathClear(brideX,brideX,brideDistance,next)) {
+        brideDistance = next;
+        brideShift.start = t;
+      } else brideShift = null;
+      return;
+    }
     const desired = distance-chaseGap-brideRetreatDistance*smooth(brideAway)-.86*slidePose()-brideYield;
-    const nextDistance = brideDistance+Math.max(-6*dt,Math.min((pace+11)*dt,desired-brideDistance));
+    const nextDistance = brideShift?.turnAt !== undefined ? brideDistance :
+      brideDistance+Math.max(-6*dt,Math.min((pace+11)*dt,desired-brideDistance));
     const progress = brideShift ? shiftProgress(brideShift) : 0;
     const nextX = !brideShift ? brideX : progress === 1 ? brideShift.to :
       brideShift.from+(brideShift.to-brideShift.from)*progress;
@@ -1196,21 +1225,9 @@
       brideX = nextX;
     } else {
       if (bridePathClear(brideX,brideX,brideDistance,nextDistance)) brideDistance = nextDistance;
-      if (brideShift) brideShift = shift(brideX,brideShift.to,Math.max(.16,brideShift.duration*(1-progress)));
+      brideShift = null;
     }
     if (brideShift && brideX === brideShift.to) brideShift = null;
-
-    // Rejoin behind the camera if several obstacles have boxed her in.
-    if (distance-brideDistance > 12) {
-      const rejoin = distance-chaseDistance-4.5;
-      const clearLane = [brideTarget,0,-laneWidth,laneWidth].find(target =>
-        bridePathClear(target,target,rejoin,rejoin+pace*.22));
-      if (clearLane !== undefined) {
-        brideX = clearLane;
-        brideDistance = rejoin;
-        brideShift = null;
-      }
-    }
   }
 
   function hitTruckFromSide(truck, previousX) {
@@ -1448,32 +1465,19 @@
 
   function updateHud() {
     lastHudUpdate = t;
+    if (inHeaven()) return;
     const active = {bottle:Math.ceil(flightUntil-t),hood:shield?1:0,boots:Math.ceil(bootsUntil-t),
-      magnet:Math.ceil(magnetUntil-t),multiplier:(portal?.factor ?? 1)-1};
-    const heaven = inHeaven();
-    const compact = !heaven && compactRunnerHud.matches;
+      magnet:Math.ceil(magnetUntil-t)};
+    const compact = compactRunnerHud.matches;
     let hasBoosts = false;
-    for (const [kind,{chip,icon,value}] of Object.entries(heaven?heavenChips:chips)) {
+    for (const [kind,{chip,value}] of Object.entries(chips)) {
       const hidden = active[kind]<=0 || (compact && kind==="hood");
       if (chip.hidden !== hidden) chip.hidden = hidden;
       if (chip.hidden) continue;
       hasBoosts = true;
-      if (kind === "multiplier") setText(icon,`×${portal.factor}`);
-      const seconds = heaven ? Math.min(active[kind],Math.ceil(heavenDuration-t)) : active[kind];
-      setText(value,kind==="hood"?"1 удар":kind==="multiplier"?"до выхода":seconds+" с");
+      setText(value,kind==="hood"?"1 удар":active[kind]+" с");
     }
-    const boostGroup = ui[heaven ? "heaven-boosts" : "boosts-live"];
-    if (boostGroup.hidden === hasBoosts) boostGroup.hidden = !hasBoosts;
-    if (heaven) {
-      setText(ui["heaven-clock"],`${Math.max(0,Math.ceil(heavenDuration-t))} с`);
-      const {sausages,multipliedSausages,factor} = portal;
-      const count = factor===1 ? sausages :
-        sausages===multipliedSausages ? `${sausages} × ${factor}` :
-        `(${multipliedSausages} × ${factor} + ${sausages-multipliedSausages})`;
-      setText(ui["heaven-money"],`${count} × ${number.format(sausageValue)} = ${money(heavenReward(portal))}`);
-      ui["heaven-progress"].style.transform = `scaleX(${Math.max(0,1-t/heavenDuration)})`;
-      return;
-    }
+    if (ui["boosts-live"].hidden === hasBoosts) ui["boosts-live"].hidden = !hasBoosts;
     setText(ui.money,formatCapital(portal?.caught ? fineCapital(portal) : capitalKopecks));
     if (compact) return;
     setText(ui.distance,number.format(Math.floor(distance-speedCurve(startTime))) + " м");

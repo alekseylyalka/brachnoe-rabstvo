@@ -91,17 +91,6 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
 .progress { height: 4px; border-radius: 10px; background: #7c6951; overflow: hidden }
 .progress i { display: block; width: 100%; height: 100%; transform: scaleX(0); transform-origin: left center; background: linear-gradient(90deg, #dd945f, #ffe3a6); border-radius: 10px }
 .heaven :is(.readout,.boosts-live,.timer) { display: none }
-.heaven-hud { position: absolute; top: calc(var(--hud-top) + env(safe-area-inset-top)); left: 50%; translate: -50%; width: min(272px, calc(100% - 116px)); padding: 9px 12px; border: 1px solid #f5ceae95; border-radius: 12px; background: #272342ed; color: #fff1df; box-shadow: 0 4px 20px #31234b40 }
-.heaven-clock { display: flex; justify-content: space-between; gap: 5px; margin-bottom: 6px; font-size: 12px; font-weight: 750 }
-.heaven-clock time { font-variant-numeric: tabular-nums; color: #ffe3a6; white-space: nowrap }
-.heaven-hud .progress { background: #5a4b81 }
-.heaven-hud .progress i { background: linear-gradient(90deg,#e88eac,#ffe8aa) }
-.heaven-hud strong { display: block; text-align: center; margin-top: 7px; color: #fff1df; font-size: clamp(12px, 2.7vw, 16px); font-variant-numeric: tabular-nums }
-.heaven-boosts { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px }
-.heaven-boosts:has(.power-chip:not([hidden])) { margin-top: 7px }
-.heaven-boosts .power-chip { padding: 2px 5px; min-height: 23px; font-size: 11px; background: #473765; border-color: #e5bae260 }
-.heaven-boosts .power-chip img { width: 17px; height: 18px }
-.heaven-boosts .multiplier-mark { width: 18px; height: 18px; font-size: 10px }
 .heaven .toast { top: auto; bottom: calc(72px + env(safe-area-inset-bottom)); border-color: #f5ceae; background: #38294ce8 }
 .cloud-veil { position: absolute; z-index: 2; inset: -20% -44%; pointer-events: none; will-change: opacity, transform; background: radial-gradient(ellipse at 17% 44%,#f8e6ff 0 16%,transparent 17%), radial-gradient(ellipse at 39% 60%,#fff7ef 0 19%,transparent 21%), radial-gradient(ellipse at 68% 27%,#ffeadf 0 20%,transparent 22%), radial-gradient(ellipse at 88% 73%,#eedafa 0 20%,transparent 22%), linear-gradient(165deg,#e9dcfa,#fff2e3 68%,#d9caee) }
 .cloud-veil i { position: absolute; width: 62%; height: 52%; background: var(--cloud-shape) center / 100% 100% no-repeat }
@@ -183,7 +172,6 @@ kbd { font-family: inherit; min-width: 24px; height: 24px; padding: 0 5px; displ
     --runner-panel-height: calc(62px + env(safe-area-inset-top));
     --runner-left: max(8px, calc(4px + env(safe-area-inset-left)));
     --runner-right: max(8px, calc(4px + env(safe-area-inset-right)));
-    --runner-bottom-inset: env(safe-area-inset-bottom);
     --runner-button: 44px;
   }
   .stage:not(.heaven):has(> :is(.hud, #runner-pause, #overlay.finished):not([hidden])) .runner-view {
