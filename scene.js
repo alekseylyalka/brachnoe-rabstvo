@@ -3045,13 +3045,14 @@ window.WeddingScene = class WeddingScene {
     this.previousFrame=elapsed;
     const altitude=state.flying?1:Math.min(.68,state.groundY*.26+Math.max(0,state.playerY-state.groundY)*.055);
     const lineupFraming=garden ? Math.max(0,Math.min(1,1-state.yardAhead/55)) : 0;
-    const cameraFollow=(portraitRun?.22:.46)*(1-lineupFraming)+.12*lineupFraming;
+    // Limit the portrait camera’s sideways travel so the opposite lane stays in view.
+    const cameraFollow=(closeCamera?.15:portraitRun?.22:.46)*(1-lineupFraming)+.12*lineupFraming;
     this.cameraRise+=((menu?0:altitude)-this.cameraRise)*(1-Math.exp(-5.5*dt));
     this.cameraX+=((menu?0:state.x*cameraFollow)-this.cameraX)*(1-Math.exp(-11*dt));
-    this.cameraDepth=menu?0:closeCamera?2.08:.56;
+    this.cameraDepth=menu?0:closeCamera?2.46:.56;
     this.cx = w*(.5+cameraShift) + drift;
     const lift=garden?Math.min(1,Math.max(0,(state.playerY-3.3)/2.85)):0;
-    this.eye=(closeCamera?4:5.65)+this.cameraRise*2.70+lift*2.85;
+    this.eye=(closeCamera?3.87:5.65)+this.cameraRise*2.70+lift*2.85;
     this.fy=h*(1.10-this.cameraRise*.23-lift*.105);
     // The closer camera widens the foreground, so keep the outer rails inside the portrait frame.
     const trackWidth=closeCamera?1.42:portraitRun?1.55:1.25;
