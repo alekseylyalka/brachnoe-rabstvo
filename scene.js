@@ -5,13 +5,13 @@ window.WeddingScene = class WeddingScene {
   static renderSettings = [
     {pixelRatio:2, sceneryDistance:196, hallPixelRatio:2, hallDistance:166, hallDetail:1},
     {pixelRatio:1.40, sceneryDistance:154, hallPixelRatio:1.25, hallDistance:124, hallDetail:.82},
-    {pixelRatio:1, sceneryDistance:112, hallPixelRatio:.90, hallDistance:94, hallDetail:.67}
+    {pixelRatio:1, sceneryDistance:112, hallPixelRatio:.90, hallDistance:94, hallDetail:.67, reducedDetail:true}
   ];
   static portraitRenderSettings = [
     {...this.renderSettings[0], pixelRatio:3, hallPixelRatio:3},
     {...this.renderSettings[1], pixelRatio:1.85, hallPixelRatio:1.85},
-    this.renderSettings[1],
-    this.renderSettings[2]
+    {...this.renderSettings[2], pixelRatio:1.85, hallPixelRatio:1.85},
+    {...this.renderSettings[2], pixelRatio:1.65, hallPixelRatio:1.65}
   ];
   static archHalfWidth = 4.68;
   static archSpring = 3.44;
@@ -51,6 +51,8 @@ window.WeddingScene = class WeddingScene {
     this.cameraX = 0;
     this.brideOffset = 0;
     this.previousFrame = 0;
+    this.displayInterval = 1/60;
+    this.refreshSamples = [];
     this.note = this.makeGlowingNote();
     this.paintings = [];
     this.photos = [];
@@ -101,13 +103,14 @@ window.WeddingScene = class WeddingScene {
     const { width, height } = this.canvas.getBoundingClientRect();
     this.w = Math.max(1, width);
     this.h = Math.max(1, height);
-    const portrait = this.w<=600 && this.h>this.w;
-    const bottomInset = portrait ? getComputedStyle(this.canvas).getPropertyValue("--runner-bottom-inset") : "";
+    this.portrait = this.w<=600 && this.h>this.w;
+    const bottomInset = this.portrait ? getComputedStyle(this.canvas).getPropertyValue("--runner-bottom-inset") : "";
     this.safeBottom = parseFloat(bottomInset) || 0;
-    if (this.portrait!==portrait) {
-      this.portrait = portrait;
-      this.qualityLevels = portrait ? WeddingScene.portraitRenderSettings : WeddingScene.renderSettings;
-      this.renderQuality = portrait ? 1 : 0;
+    const mobileResolution = this.h>this.w && (this.portrait || matchMedia("(any-pointer: coarse)").matches);
+    if (this.mobileResolution!==mobileResolution) {
+      this.mobileResolution = mobileResolution;
+      this.qualityLevels = mobileResolution ? WeddingScene.portraitRenderSettings : WeddingScene.renderSettings;
+      this.renderQuality = mobileResolution ? 1 : 0;
       this.resetPerformanceWindow();
     }
     this.resizeBuffer();
@@ -118,7 +121,7 @@ window.WeddingScene = class WeddingScene {
     // The scene scales independently of the sharp, CSS-rendered controls and labels.
     const {pixelRatio,hallPixelRatio}=this.qualityLevels[this.renderQuality];
     const ratio=this.renderingHall?hallPixelRatio:pixelRatio;
-    const pixelBudget = this.portrait ? 2_400_000 : 1_650_000;
+    const pixelBudget = this.mobileResolution ? 2_400_000 : 1_650_000;
     this.dpr = Math.min(ratio,devicePixelRatio || 1,Math.sqrt(pixelBudget/(this.w*this.h)));
     const pixelWidth = Math.round(this.w*this.dpr);
     const pixelHeight = Math.round(this.h*this.dpr);
@@ -128,13 +131,24 @@ window.WeddingScene = class WeddingScene {
 
   resetPerformanceWindow() {
     this.performanceFrames = this.slowFrames = this.smoothWindows = 0;
-    this.minimumRenderQuality = 0;
+    this.retryQualityAfter = -Infinity;
   }
 
-  adaptToFrameTime(interval) {
+  sampleDisplayInterval(interval) {
+    const samples = this.refreshSamples;
+    if (!this.mobileResolution || samples.length>=16 || interval<.006 || interval>.05) return;
+    samples.push(interval);
+    if (samples.length===16) {
+      // Use the faster idle menu frames to estimate the WebView's normal cadence.
+      samples.sort((a,b)=>a-b);
+      this.displayInterval = Math.min(1/30,Math.max(1/60,samples[3]));
+    }
+  }
+
+  adaptToFrameTime(interval, elapsed) {
     if (interval<=0) return;
     this.performanceFrames++;
-    if (interval>.021) this.slowFrames++;
+    if (interval>Math.max(.021,this.displayInterval*1.26)) this.slowFrames++;
     if (this.performanceFrames<28) return;
     const lower = this.slowFrames>=5;
     this.smoothWindows=this.slowFrames<=1 ? this.smoothWindows+1 : 0;
@@ -142,9 +156,9 @@ window.WeddingScene = class WeddingScene {
     const previous=this.renderQuality;
     if (lower) {
       this.renderQuality=Math.min(this.qualityLevels.length-1,previous+1);
-      // Avoid retrying a setting that already caused frame drops in this section.
-      this.minimumRenderQuality=this.renderQuality;
-    } else if (this.smoothWindows>=10 && previous>this.minimumRenderQuality) {
+      // Wait before probing a setting that missed several frame deadlines.
+      this.retryQualityAfter=elapsed+12;
+    } else if (this.smoothWindows*28*this.displayInterval>=4.5 && previous>0 && elapsed>=this.retryQualityAfter) {
       this.renderQuality=previous-1;
       this.smoothWindows=0;
     }
@@ -1588,8 +1602,8 @@ window.WeddingScene = class WeddingScene {
     this.box(x,z,.30,.34,0,treeHeight,["#8d6b47","#b38d5e","#6f5d3e"]);
     const g = this.ctx;
     const opacity = g.globalAlpha;
-    const lowQuality = this.renderQuality===this.qualityLevels.length-1;
-    const detail = Math.min(1,Math.max(0,(s-(lowQuality?10:7))/3));
+    const {reducedDetail}=this.qualityLevels[this.renderQuality];
+    const detail = Math.min(1,Math.max(0,(s-(reducedDetail?10:7))/3));
     if (detail < 1) {
       const [topX,topY]=this.project(x,treeHeight-.45,z);
       g.globalAlpha = opacity*(1-detail);
@@ -1872,8 +1886,8 @@ window.WeddingScene = class WeddingScene {
       const [cos,sin]=WeddingScene.archCurve[i];
       return [(frame+(inner?-.14:.14))*cos,spring+(inner?1.58:1.88)*sin,z+depth];
     };
-    const lowQuality = this.renderQuality===this.qualityLevels.length-1;
-    if (this.fy/d<(lowQuality?36:26)) {
+    const {reducedDetail}=this.qualityLevels[this.renderQuality];
+    if (this.fy/d<(reducedDetail?36:26)) {
       const band = [];
       for (let i=0;i<=18;i+=2) band.push(beam(i,false,0));
       for (let i=18;i>=0;i-=2) band.push(beam(i,true,0));
@@ -3015,11 +3029,11 @@ window.WeddingScene = class WeddingScene {
     if (sectionChanged) {
       this.renderingHall=renderingHall;
       this.renderingHeaven=state.heaven;
-      if (this.portrait) this.resetPerformanceWindow();
+      if (this.mobileResolution) this.resetPerformanceWindow();
       this.resizeBuffer();
     }
     const playing = state.mode==="playing";
-    if (playing && this.wasPlaying && !sectionChanged) this.adaptToFrameTime(intervalSinceDraw);
+    if (playing && this.wasPlaying && !sectionChanged) this.adaptToFrameTime(intervalSinceDraw,elapsed);
     this.wasPlaying = playing;
     g.setTransform(this.dpr,0,0,this.dpr,0,0);
     const compactMenu = menu && w<=740;

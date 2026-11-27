@@ -1831,6 +1831,7 @@
     const dt = previousFrame ? Math.min(.25,(now-previousFrame)/1000) : 0;
     previousFrame = now;
     if (mode === "menu") {
+      scene.sampleDisplayInterval(dt);
       requestAnimationFrame(frame);
       return;
     }
