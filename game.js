@@ -1532,12 +1532,12 @@
     const compact = compactRunnerHud.matches;
     let hasBoosts = false;
     for (const [kind,{chip,icon,value}] of Object.entries(chips)) {
-      const hidden = active[kind]<=0 || (!heaven && compact && kind==="hood");
+      const hidden = active[kind]<=0;
       if (chip.hidden !== hidden) chip.hidden = hidden;
       if (chip.hidden) continue;
       hasBoosts = true;
       if (kind==="multiplier") setText(icon,`×${portal.factor}`);
-      else setText(value,kind==="hood"?(heaven && compact?"1":"1 удар"):active[kind]+" с");
+      else setText(value,kind==="hood"?(compact?"1":"1 удар"):active[kind]+" с");
     }
     if (ui["boosts-live"].hidden === hasBoosts) ui["boosts-live"].hidden = !hasBoosts;
     if (heaven) {
